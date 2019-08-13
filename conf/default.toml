@@ -1,0 +1,24 @@
+[batch]
+size = 500
+max_wait = 5
+repeat = 10
+delay_time = 5
+buffer_size = 1000000
+job_count   = 1000
+
+[write]
+timeout = 20
+threads = 400
+streams = [
+  { listen=":5086", location = ["http://127.0.0.1:8086"] }
+]
+
+[read]
+timeout = 20
+max_queue = 100000
+streams = [
+  { listen=":6086", location = ["http://127.0.0.1:8086"] }
+]
+
+[monit]
+listen = ":5000"
