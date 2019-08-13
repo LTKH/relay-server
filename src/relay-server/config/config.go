@@ -10,22 +10,22 @@ type Config struct {
   Batch struct {
     Size         int
     Max_wait     time.Duration
-    Repeat       int
-    Delay_time   time.Duration
     Buffer_size  int
     Job_count    int
   }
-  Write struct {
+  Read struct {
     Timeout      time.Duration
-    Threads      int
+    Max_queue    int
     Streams []struct {
       Listen     string
       Location   []string
     }
   }
-  Read struct {
+  Write struct {
     Timeout      time.Duration
-    Max_queue    int
+    Threads      int
+    Repeat       int
+    Delay_time   time.Duration
     Streams []struct {
       Listen     string
       Location   []string

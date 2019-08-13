@@ -56,12 +56,6 @@ func GetJobChan() map[string](chan int) {
 
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
-  if r.URL.Path == "/ping" {
-    w.Header().Add("X-InfluxDB-Version", "relay-server")
-    w.WriteHeader(204)
-    return
-  }
-
   if r.URL.Path == "/write" {
 
     //reading request body
@@ -241,7 +235,7 @@ func Sender(url string, cfg config.Config) {
 
       batch := map[string]*Batch{}
 
-      for ok := true; ok; ok = (len(req_chan[url]) > 0) {
+      for i := 0; i < cfg.Batch.Size; i++ {
         select {
           case r := <- req_chan[url]:
             if batch[r.Query] == nil {
@@ -253,17 +247,21 @@ func Sender(url string, cfg config.Config) {
               }
             }
             if len(batch[r.Query].Body) > cfg.Batch.Size {
-              break
+              goto End
             }
+          default:
+            continue
         }
       }
+
+      End:
 
       for q, r := range batch{
         job_chan[url] <- 1
         go func(q string, url string, r *Batch, cfg config.Config){
           body := strings.Join(r.Body, "\n")
 
-          for i := 1; i <= cfg.Batch.Repeat; i++ {
+          for i := 1; i <= cfg.Write.Repeat; i++ {
 
             query := &Query{ "POST", url+"/write", r.Auth, q, body }
             _, code := request(query, cfg.Write.Timeout)
@@ -272,11 +270,11 @@ func Sender(url string, cfg config.Config) {
               break
             }
 
-            if i == cfg.Batch.Repeat {
+            if i == cfg.Write.Repeat {
               //cachePut(query)
             }
 
-            time.Sleep(cfg.Batch.Delay_time * time.Second)
+            time.Sleep(cfg.Write.Delay_time * time.Second)
           }
           <- job_chan[url]
         }(q, url, r, cfg)
