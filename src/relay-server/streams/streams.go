@@ -8,13 +8,17 @@ import (
   //"bytes"
   "strings"
   //"crypto/sha1"
-  //"encoding/json"
+  "encoding/json"
+  "crypto/md5"
+  "encoding/hex"
   "relay-server/config"
   //"github.com/gadelkareem/cachita"
   //"github.com/gokyle/filecache"
-  //"github.com/peterbourgon/diskv"
+  "github.com/peterbourgon/diskv"
   //"github.com/allegro/bigcache"
   //"cmd/go/internal/cache"
+  //"gopkg.in/stash.v1"
+  //"github.com/peterbourgon/diskv"
 )
 
 var (
@@ -39,6 +43,7 @@ type Query struct {
   Auth       string
   Query      string
   Body       string
+  Locat      string
 }
 
 type Batch struct {
@@ -64,17 +69,18 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
       log.Printf("[error] %v - %s", err, r.URL.Path)
     }
 
-    for _, url := range m.Location {
+    for _, locat := range m.Location {
       select {
-        case req_chan[url] <- &Query{
+        case req_chan[locat] <- &Query{
           Method: "POST",
-          Url:    url+r.URL.Path,
+          Url:    locat+r.URL.Path,
           Auth:   r.Header.Get("Authorization"),
           Query:  r.URL.Query().Encode(),
           Body:   string(body),
+          Locat:  locat,
         }:
         default:
-          log.Printf("[error] cahhel is not ready - %s", url)
+          log.Printf("[error] channel is not ready - %s", locat)
       }
     }
     w.WriteHeader(204)
@@ -95,25 +101,26 @@ func (m *Read) ServeHTTP(w http.ResponseWriter, r *http.Request) {
       return
     }
 
-    for _, url := range m.Location {
-      if req_chan[url] != nil && len(req_chan[url]) > m.Max_queue {
-        log.Printf("[error] max queue exceeded - %s %d", url, len(req_chan[url]))
+    for _, locat := range m.Location {
+      if req_chan[locat] != nil && len(req_chan[locat]) > m.Max_queue {
+        log.Printf("[error] max queue exceeded - %s %d", locat, len(req_chan[locat]))
         continue
       }
 
       answBody, answCode := request(
         &Query{
-          r.Method,
-          url+r.URL.Path,
-          r.Header.Get("Authorization") ,
-          r.URL.Query().Encode(),
-          string(body),
+          Method: r.Method,
+          Url:    locat+r.URL.Path,
+          Auth:   r.Header.Get("Authorization") ,
+          Query:  r.URL.Query().Encode(),
+          Body:   string(body),
+          Locat:  locat,
         },
         m.Timeout,
       )
 
       if answCode >= 400 {
-        log.Printf("[error] answer code - %s %d", url, answCode)
+        log.Printf("[error] answer code - %s %d", locat, answCode)
         continue
       }
 
@@ -163,73 +170,13 @@ func request(query *Query, tout time.Duration) ([]byte, int) {
   return body, resp.StatusCode
 }
 
-/*
-func cachePut(query *Query) bool {
-  out, err := json.Marshal(query)
-  if err != nil {
-      log.Printf("[error] %v", err)
-      return false
-  }
-  sh := sha1.New()
-  sh.Write([]byte(out))
-  key := sh.Sum(nil)
+func Sender(locat string, cfg config.Config) {
 
-  //cache, err := cachita.File()
-  cache, err := cachita.NewFileCache("/Users/dmitry/Documents/relay-server/cache", 1, 0)
-  if err != nil {
-    log.Printf("[error] %v", err)
-    return false
-  }
-
-  err = cache.Put(string(key), query, 60*time.Minute)
-  if err != nil {
-    log.Printf("[error] %v", err)
-    return false
-  }
-
-  log.Printf("[info] save cache - %x", key)
-  return true
-
-  //log.Printf("[info] %v", cache.readData())
-
-  //var qu Query
-  //err = cache.Get(string(key), &qu)
-  //if err != nil && err != cachita.ErrNotFound {
-  //    panic(err)
-  //}
-  //log.Printf("%v", qu) //prints "some data"
-
-  cache := filecache.NewDefaultCache()
-  cache.MaxSize = 128 * filecache.Megabyte
-  cache.Start()
-
-  buf := bytes.NewBufferString(string(out))
-  err = cache.WriteFile(buf, "/Users/dmitry/Documents/relay-server/cache/123")
-  if err != nil {
-      log.Printf("[error] %v", err)
-  }
-
-  // Initialize a new diskv store, rooted at "my-data-dir", with a 1MB cache.
   d := diskv.New(diskv.Options{
-    BasePath:     "/Users/dmitry/Documents/relay-server/cache",
-    Transform:    func(s string) []string { return []string{} },
-    CacheSizeMax: 1024 * 1024,
-  })
+		BasePath:     cfg.Batch.Cache_dir,
+		CacheSizeMax: cfg.Batch.Cache_size,
+	})
 
-  // Write three bytes to the key "alpha".
-  err = d.Write(string(key), []byte(out))
-  if err != nil {
-      log.Printf("[error] %v", err)
-  }
-
-
-  //cache, _ := bigcache.NewBigCache(bigcache.DefaultConfig(10 * time.Minute))
-  //cache.Set(string(key), []byte(string(out)))
-
-}
-*/
-
-func Sender(url string, cfg config.Config) {
   for {
     if len(job_chan) < cfg.Write.Threads {
 
@@ -237,7 +184,7 @@ func Sender(url string, cfg config.Config) {
 
       for i := 0; i < cfg.Batch.Size; i++ {
         select {
-          case r := <- req_chan[url]:
+          case r := <- req_chan[locat]:
             if batch[r.Query] == nil {
               batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
             }
@@ -257,27 +204,44 @@ func Sender(url string, cfg config.Config) {
       End:
 
       for q, r := range batch{
-        job_chan[url] <- 1
-        go func(q string, url string, r *Batch, cfg config.Config){
+        job_chan[locat] <- 1
+        go func(q string, locat string, r *Batch, cfg config.Config){
           body := strings.Join(r.Body, "\n")
 
           for i := 1; i <= cfg.Write.Repeat; i++ {
 
-            query := &Query{ "POST", url+"/write", r.Auth, q, body }
+            query := &Query{ "POST", locat+"/write", r.Auth, q, body, locat }
             _, code := request(query, cfg.Write.Timeout)
 
-            if code == 200 || code == 204 {
+            if code < 500 {
               break
             }
 
             if i == cfg.Write.Repeat {
-              //cachePut(query)
+
+              out, err := json.Marshal(query)
+              if err != nil {
+                log.Printf("[error] %v", err)
+                break
+              }
+
+              data := []byte(out)
+              hasher := md5.New()
+              hasher.Write(data)
+
+              err = d.Write(hex.EncodeToString(hasher.Sum(nil)), data)
+              if err != nil {
+                log.Printf("[error] %v", err)
+                break
+              }
+              log.Printf("[info] added request to cache - %s (%d)", query.Url, code)
+
             }
 
             time.Sleep(cfg.Write.Delay_time * time.Second)
           }
-          <- job_chan[url]
-        }(q, url, r, cfg)
+          <- job_chan[locat]
+        }(q, locat, r, cfg)
       }
     }
 

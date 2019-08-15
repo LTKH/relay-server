@@ -27,10 +27,10 @@ func (m *Monitor) ServeHTTP(w http.ResponseWriter, r *http.Request){
   mapD := []*Health{}
 
   for _, stream := range m.Config.Write.Streams{
-    for _, url := range stream.Location{
-      location := url
+    for _, locat := range stream.Location{
+      location := locat
       re := regexp.MustCompile("[0-9]+.[0-9]+.[0-9]+.[0-9]+")
-      location = re.ReplaceAllStringFunc(url, func (a string) string{
+      location = re.ReplaceAllStringFunc(locat, func (a string) string{
         host, err := net.LookupAddr(a)
         if err != nil {
           return a
@@ -39,8 +39,8 @@ func (m *Monitor) ServeHTTP(w http.ResponseWriter, r *http.Request){
       })
       mapD = append(mapD, &Health{
         Location:  location,
-        Req_count: len(req_chan[url]),
-        Job_count: len(job_chan[url]),
+        Req_count: len(req_chan[locat]),
+        Job_count: len(job_chan[locat]),
       })
     }
   }

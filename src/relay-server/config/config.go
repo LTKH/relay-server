@@ -12,6 +12,8 @@ type Config struct {
     Max_wait     time.Duration
     Buffer_size  int
     Job_count    int
+    Cache_dir    string
+    Cache_size   uint64
   }
   Read struct {
     Timeout      time.Duration

@@ -3,6 +3,8 @@ size        = 500
 max_wait    = 5
 buffer_size = 1000000
 job_count   = 1000
+cache_dir   = "/tmp/cache"
+cache_size  = 1073741824
 
 [read]
 timeout     = 20
@@ -14,7 +16,7 @@ streams     = [
 [write]
 timeout     = 20
 threads     = 400
-repeat      = 10
+repeat      = 2
 delay_time  = 5
 streams     = [
   { listen=":5086", location = ["http://127.0.0.1:8086"] }
