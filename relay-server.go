@@ -109,7 +109,7 @@ func main(){
         continue
       }
 
-      if len(req_chan[query.Locat]) < cfg.Batch.Buffer_size {
+      if len(req_chan[query.Locat]) < cfg.Read.Max_queue {
         select {
         case req_chan[query.Locat] <- &query:
             d.Erase(key)
