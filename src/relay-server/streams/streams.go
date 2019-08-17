@@ -119,7 +119,6 @@ func (m *Read) ServeHTTP(w http.ResponseWriter, r *http.Request) {
       )
 
       if answCode >= 400 {
-        log.Printf("[error] answer code - %s %d", locat, answCode)
         continue
       }
 
