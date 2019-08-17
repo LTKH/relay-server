@@ -18,7 +18,6 @@ import (
   //"github.com/allegro/bigcache"
   //"cmd/go/internal/cache"
   //"gopkg.in/stash.v1"
-  //"github.com/peterbourgon/diskv"
 )
 
 var (
@@ -172,11 +171,6 @@ func request(query *Query, tout time.Duration) ([]byte, int) {
 
 func Sender(locat string, cfg config.Config) {
 
-  d := diskv.New(diskv.Options{
-		BasePath:     cfg.Batch.Cache_dir,
-		CacheSizeMax: cfg.Batch.Cache_size,
-	})
-
   for {
     if len(job_chan) < cfg.Write.Threads {
 
@@ -218,6 +212,11 @@ func Sender(locat string, cfg config.Config) {
             }
 
             if i == cfg.Write.Repeat {
+
+              d := diskv.New(diskv.Options{
+            		BasePath:     cfg.Batch.Cache_dir,
+            		CacheSizeMax: cfg.Batch.Cache_size,
+            	})
 
               out, err := json.Marshal(query)
               if err != nil {

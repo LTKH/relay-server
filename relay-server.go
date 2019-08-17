@@ -51,7 +51,7 @@ func main(){
       }),
     }
     go server[stream.Listen].ListenAndServe()
-    log.Printf("[info] listen write port - %s", stream.Listen)
+    log.Printf("[info] write port enabled - %s", stream.Listen)
 
     for _, locat := range stream.Location{
       req_chan[locat] = make(chan *streams.Query, cfg.Batch.Buffer_size)
@@ -75,7 +75,7 @@ func main(){
       }),
     }
     go server[stream.Listen].ListenAndServe()
-    log.Printf("[info] listen read port - %s", stream.Listen)
+    log.Printf("[info] read port enabled - %s", stream.Listen)
   }
 
   log.Print("[info] relay-server started o_O")
@@ -122,7 +122,7 @@ func main(){
   	}
 
 
-    time.Sleep(60 * time.Second)
+    time.Sleep(300 * time.Second)
   }
 
 }
