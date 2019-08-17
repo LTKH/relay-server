@@ -55,7 +55,7 @@ func main(){
 
     for _, locat := range stream.Location{
       req_chan[locat] = make(chan *streams.Query, cfg.Batch.Buffer_size)
-      job_chan[locat] = make(chan int, cfg.Batch.Job_count)
+      job_chan[locat] = make(chan int, cfg.Write.Threads)
 
       for i := 0; i < cfg.Write.Threads; i++ {
         go streams.Sender(locat, cfg)
@@ -96,7 +96,14 @@ func main(){
   		CacheSizeMax: cfg.Batch.Cache_size,
   	})
 
+    cnt := 0
+
     for key := range d.Keys(nil) {
+
+      if cnt >= cfg.Write.Threads {
+        break
+      }
+
   		val, err := d.Read(key)
   		if err != nil {
   			log.Printf("[error] %v", err)
@@ -109,20 +116,19 @@ func main(){
         continue
       }
 
-      if len(req_chan[query.Locat]) < cfg.Read.Max_queue {
+      if len(job_chan[query.Locat]) < cfg.Write.Threads / 2 {
         select {
         case req_chan[query.Locat] <- &query:
             d.Erase(key)
+            cnt ++
             log.Printf("[info] added request to channel from cache - %s", query.Url)
           default:
             log.Printf("[error] channel is not ready - %s", query.Locat)
         }
       }
-
   	}
 
-
-    time.Sleep(300 * time.Second)
+    time.Sleep(60 * time.Second)
   }
 
 }

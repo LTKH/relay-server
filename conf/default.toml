@@ -2,7 +2,6 @@
 size        = 500
 max_wait    = 5
 buffer_size = 1000000
-job_count   = 1000
 cache_dir   = "/tmp/cache"
 cache_size  = 1073741824
 

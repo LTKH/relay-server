@@ -11,7 +11,6 @@ type Config struct {
     Size         int
     Max_wait     time.Duration
     Buffer_size  int
-    Job_count    int
     Cache_dir    string
     Cache_size   uint64
   }
