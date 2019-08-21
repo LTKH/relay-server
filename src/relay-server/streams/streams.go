@@ -210,11 +210,11 @@ func Sender(locat string, cfg config.Config) {
               break
             }
 
-            if i == cfg.Write.Repeat {
+            if i == cfg.Write.Repeat && cfg.Cache.Enabled {
 
               d := diskv.New(diskv.Options{
-            		BasePath:     cfg.Batch.Cache_dir,
-            		CacheSizeMax: cfg.Batch.Cache_size,
+            		BasePath:     cfg.Cache.Directory,
+            		CacheSizeMax: cfg.Cache.Size,
             	})
 
               out, err := json.Marshal(query)

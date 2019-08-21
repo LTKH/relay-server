@@ -91,42 +91,46 @@ func main(){
 
   //daemon mode
   for {
-    d := diskv.New(diskv.Options{
-  		BasePath:     cfg.Batch.Cache_dir,
-  		CacheSizeMax: cfg.Batch.Cache_size,
-  	})
 
-    cnt := 0
+    if cfg.Cache.Enabled {
 
-    for key := range d.Keys(nil) {
+      d := diskv.New(diskv.Options{
+    		BasePath:     cfg.Cache.Directory,
+    		CacheSizeMax: cfg.Cache.Size,
+    	})
 
-      if cnt >= cfg.Write.Threads {
-        break
-      }
+      cnt := 0
 
-  		val, err := d.Read(key)
-  		if err != nil {
-  			log.Printf("[error] %v", err)
-        continue
-  		}
+      for key := range d.Keys(nil) {
 
-      var query streams.Query
-      if err := json.Unmarshal(val, &query); err != nil {
-        log.Printf("[error] %v", err)
-        continue
-      }
-
-      if len(job_chan[query.Locat]) < cfg.Write.Threads / 2 {
-        select {
-        case req_chan[query.Locat] <- &query:
-            d.Erase(key)
-            cnt ++
-            log.Printf("[info] added request to channel from cache - %s", query.Url)
-          default:
-            log.Printf("[error] channel is not ready - %s", query.Locat)
+        if cnt >= cfg.Write.Threads {
+          break
         }
-      }
-  	}
+
+    		val, err := d.Read(key)
+    		if err != nil {
+    			log.Printf("[error] %v", err)
+          continue
+    		}
+
+        var query streams.Query
+        if err := json.Unmarshal(val, &query); err != nil {
+          log.Printf("[error] %v", err)
+          continue
+        }
+
+        if len(job_chan[query.Locat]) < cfg.Write.Threads / 2 {
+          select {
+          case req_chan[query.Locat] <- &query:
+              d.Erase(key)
+              cnt ++
+              log.Printf("[info] added request to channel from cache - %s", query.Url)
+            default:
+              log.Printf("[error] channel is not ready - %s", query.Locat)
+          }
+        }
+    	}
+    }
 
     time.Sleep(10 * time.Second)
   }

@@ -11,8 +11,11 @@ type Config struct {
     Size         int
     Max_wait     time.Duration
     Buffer_size  int
-    Cache_dir    string
-    Cache_size   uint64
+  }
+  Cache struct {
+    Enabled      bool
+    Directory    string
+    Size         uint64
   }
   Read struct {
     Timeout      time.Duration

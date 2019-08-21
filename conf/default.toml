@@ -2,8 +2,11 @@
 size        = 500
 max_wait    = 5
 buffer_size = 1000000
-cache_dir   = "/tmp/cache"
-cache_size  = 1073741824
+
+[cache]
+enabled     = true
+directory   = "/tmp/cache"
+size        = 1073741824
 
 [read]
 timeout     = 20
