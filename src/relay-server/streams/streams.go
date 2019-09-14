@@ -59,6 +59,11 @@ type Batch struct {
 
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
+  if r.URL.Path == "/ping" {
+    w.WriteHeader(204)
+    return
+  }
+
   if r.URL.Path == "/write" {
 
     //reading request body
