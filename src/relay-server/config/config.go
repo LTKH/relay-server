@@ -15,11 +15,10 @@ type Config struct {
   Cache struct {
     Enabled      bool
     Directory    string
-    Size         uint64
   }
   Read struct {
     Timeout      time.Duration
-    Max_queue    int
+    Max_threads  int
     Streams []struct {
       Listen     string
       Location   []string
@@ -38,6 +37,14 @@ type Config struct {
   Monit struct {
     Listen       string
   }
+  Limits  map[string]Limitations
+}
+
+type Limitations struct {
+  Enabled      bool
+  Regexp       string
+  Replace      string
+  Limit        int
 }
 
 func LoadConfigFile(filename string) (cfg Config, err error) {

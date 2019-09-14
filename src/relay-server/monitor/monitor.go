@@ -1,50 +1,69 @@
 package monitor
 
 import (
-  "net"
-  "regexp"
-  "strings"
+  "time"
   "net/http"
-  "encoding/json"
-  "relay-server/config"
   "relay-server/streams"
+  "github.com/prometheus/client_golang/prometheus"
+  "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-type Monitor struct {
-  Config    config.Config
-}
+var (
 
-type Health struct {
-  Location  string `json:"location"`
-  Req_count int    `json:"req_count"`
-  Job_count int    `json:"job_count"`
-}
+  reqGauge = prometheus.NewGaugeVec(
+    prometheus.GaugeOpts{
+      Namespace: "relay_server",
+      Name: "req_count",
+      Help: "",
+    },
+    []string{"location"},
+  )
 
-func (m *Monitor) ServeHTTP(w http.ResponseWriter, r *http.Request){
-  req_chan := streams.GetReqChan()
-  job_chan := streams.GetJobChan()
+  jobGauge = prometheus.NewGaugeVec(
+    prometheus.GaugeOpts{
+      Namespace: "relay_server",
+      Name: "job_count",
+      Help: "",
+    },
+    []string{"location"},
+  )
 
-  mapD := []*Health{}
+  sttGauge = prometheus.NewGaugeVec(
+    prometheus.GaugeOpts{
+      Namespace: "relay_server",
+      Name: "stt_stats",
+      Help: "",
+    },
+    []string{"limit","key"},
+  )
+)
 
-  for _, stream := range m.Config.Write.Streams{
-    for _, locat := range stream.Location{
-      location := locat
-      re := regexp.MustCompile("[0-9]+.[0-9]+.[0-9]+.[0-9]+")
-      location = re.ReplaceAllStringFunc(locat, func (a string) string{
-        host, err := net.LookupAddr(a)
-        if err != nil {
-          return a
+func Start(listen string){
+
+  http.Handle("/metrics", promhttp.Handler())
+
+  prometheus.MustRegister(reqGauge)
+  prometheus.MustRegister(jobGauge)
+  prometheus.MustRegister(sttGauge)
+
+  go func() {
+     for {
+        for key, _ := range streams.Req_chan {
+          reqGauge.With(prometheus.Labels{"location":key}).Set(float64(len(streams.Req_chan[key])))
         }
-        return strings.Join(host, "")
-      })
-      mapD = append(mapD, &Health{
-        Location:  location,
-        Req_count: len(req_chan[locat]),
-        Job_count: len(job_chan[locat]),
-      })
-    }
-  }
+        for key, _ := range streams.Job_chan {
+          jobGauge.With(prometheus.Labels{"location":key}).Set(float64(len(streams.Job_chan[key])))
+        }
+        for key, limit := range streams.Stt_stat {
+          limit.Stat.Range(func(k, v interface{}) bool {
+            sttGauge.With(prometheus.Labels{"limit":key,"key":k.(string)}).Set(float64(v.(int)))
+            streams.Stt_stat[key].Stat.Store(k, 0)
+            return true 
+          })
+        }
+        time.Sleep(10 * time.Second)
+     }
+  }()
 
-  mapB, _ := json.Marshal(mapD)
-  w.Write(mapB)
+  go http.ListenAndServe(listen, nil)
 }

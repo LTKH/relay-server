@@ -7,55 +7,54 @@ import (
   "io/ioutil"
   //"bytes"
   "strings"
+  "regexp"
   //"crypto/sha1"
+  //"sync/atomic"
+  "sync"
   "encoding/json"
   "crypto/md5"
   "encoding/hex"
   "relay-server/config"
-  //"github.com/gadelkareem/cachita"
-  //"github.com/gokyle/filecache"
-  "github.com/peterbourgon/diskv"
-  //"github.com/allegro/bigcache"
-  //"cmd/go/internal/cache"
-  //"gopkg.in/stash.v1"
 )
 
 var (
-  req_chan = make(map[string](chan *Query))
-  job_chan = make(map[string](chan int))
+  Req_chan = make(map[string](chan *Query))
+  Job_chan = make(map[string](chan int))
+  //Stt_rexp = make(map[string](*Limits))
+  //Stt_stat = make(map[string](sync.Map))
+  Stt_stat = make(map[string](*Limits))
 )
 
+type Limits struct {
+  Stat         sync.Map
+  Regexp       *regexp.Regexp
+  Replace      string
+  Limit        int
+}
+
 type Write struct {
-  Location   []string
-  Timeout    time.Duration
+  Location     []string
+  Timeout      time.Duration
 }
 
 type Read struct {
-  Location   []string
-  Timeout    time.Duration
-  Max_queue  int
+  Location     []string
+  Timeout      time.Duration
+  Max_threads  int
 }
 
 type Query struct {
-  Method     string
-  Url        string
-  Auth       string
-  Query      string
-  Body       string
-  Locat      string
+  Method       string
+  Url          string
+  Auth         string
+  Query        string
+  Body         string
+  Locat        string
 }
 
 type Batch struct {
-  Auth       string
-  Body       []string
-}
-
-func GetReqChan() map[string](chan *Query) {
-  return req_chan
-}
-
-func GetJobChan() map[string](chan int) {
-  return job_chan
+  Auth         string
+  Body         []string
 }
 
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,9 +67,31 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
       log.Printf("[error] %v - %s", err, r.URL.Path)
     }
 
+    //parsing request body
+    for _, line := range strings.Split(string(body), "\n") {
+      for key, limit := range Stt_stat {
+        if !limit.Regexp.MatchString(line){
+          continue
+        }
+        tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
+
+        v, ok := limit.Stat.Load(tag)
+        if ok {
+          val := v.(int)
+          if limit.Limit > 0 && val > limit.Limit {
+            w.WriteHeader(503)
+            return
+          }
+          Stt_stat[key].Stat.Store(tag, val + 1)
+        } else {
+          Stt_stat[key].Stat.Store(tag, 1)
+        }
+      }
+    }
+
     for _, locat := range m.Location {
       select {
-        case req_chan[locat] <- &Query{
+        case Req_chan[locat] <- &Query{
           Method: "POST",
           Url:    locat+r.URL.Path,
           Auth:   r.Header.Get("Authorization"),
@@ -101,8 +122,8 @@ func (m *Read) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     }
 
     for _, locat := range m.Location {
-      if req_chan[locat] != nil && len(req_chan[locat]) > m.Max_queue {
-        log.Printf("[error] max queue exceeded - %s %d", locat, len(req_chan[locat]))
+      if Job_chan[locat] != nil && len(Job_chan[locat]) > m.Max_threads {
+        log.Printf("[error] max threads exceeded - %s %d", locat, len(Req_chan[locat]))
         continue
       }
 
@@ -133,7 +154,6 @@ func (m *Read) ServeHTTP(w http.ResponseWriter, r *http.Request) {
   }
 
   w.WriteHeader(400)
-  return
 }
 
 func request(query *Query, tout time.Duration) ([]byte, int) {
@@ -168,16 +188,54 @@ func request(query *Query, tout time.Duration) ([]byte, int) {
   return body, resp.StatusCode
 }
 
+func Repeat(query *Query, cfg config.Config) {
+
+  Job_chan[query.Locat] <- 1
+
+  for i := 1; i <= cfg.Write.Repeat; i++ {
+
+    _, code := request(query, cfg.Write.Timeout)
+    if code < 500 { 
+      break
+    }
+    
+    if i == cfg.Write.Repeat && cfg.Cache.Enabled {
+      
+      out, err := json.MarshalIndent(query, "", "")
+      if err != nil {
+        log.Printf("[error] %v", err)
+        break
+      }
+
+      hasher := md5.New()
+      hasher.Write(out)
+
+      path := cfg.Cache.Directory+"/"+hex.EncodeToString(hasher.Sum(nil))
+
+      if err := ioutil.WriteFile(path, out, 0644); err != nil {
+        log.Printf("[error] creating cache file: %v", err)
+      } else {
+        log.Printf("[info] added request to cache - %s (%d)", query.Url, code)
+      }
+
+    }
+
+    time.Sleep(cfg.Write.Delay_time * time.Second)
+  }
+
+  <- Job_chan[query.Locat]
+}
+
 func Sender(locat string, cfg config.Config) {
 
   for {
-    if len(job_chan) < cfg.Write.Threads {
+    if len(Job_chan) < cfg.Write.Threads {
 
       batch := map[string]*Batch{}
 
       for i := 0; i < cfg.Batch.Size; i++ {
         select {
-          case r := <- req_chan[locat]:
+          case r := <- Req_chan[locat]:
             if batch[r.Query] == nil {
               batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
             }
@@ -197,49 +255,10 @@ func Sender(locat string, cfg config.Config) {
       End:
 
       for q, r := range batch{
-        job_chan[locat] <- 1
-        go func(q string, locat string, r *Batch, cfg config.Config){
-          body := strings.Join(r.Body, "\n")
+        
+        query := &Query{ "POST", locat+"/write", r.Auth, q, strings.Join(r.Body, "\n"), locat }
+        go Repeat(query, cfg) 
 
-          for i := 1; i <= cfg.Write.Repeat; i++ {
-
-            query := &Query{ "POST", locat+"/write", r.Auth, q, body, locat }
-            _, code := request(query, cfg.Write.Timeout)
-
-            if code < 500 {
-              break
-            }
-
-            if i == cfg.Write.Repeat && cfg.Cache.Enabled {
-
-              d := diskv.New(diskv.Options{
-            		BasePath:     cfg.Cache.Directory,
-            		CacheSizeMax: cfg.Cache.Size,
-            	})
-
-              out, err := json.Marshal(query)
-              if err != nil {
-                log.Printf("[error] %v", err)
-                break
-              }
-
-              data := []byte(out)
-              hasher := md5.New()
-              hasher.Write(data)
-
-              err = d.Write(hex.EncodeToString(hasher.Sum(nil)), data)
-              if err != nil {
-                log.Printf("[error] %v", err)
-                break
-              }
-              log.Printf("[info] added request to cache - %s (%d)", query.Url, code)
-
-            }
-
-            time.Sleep(cfg.Write.Delay_time * time.Second)
-          }
-          <- job_chan[locat]
-        }(q, locat, r, cfg)
       }
     }
 
