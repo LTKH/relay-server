@@ -20,7 +20,7 @@ threads     = 400
 repeat      = 5
 delay_time  = 5
 streams     = [
-  { listen=":6086", location = ["http://127.0.0.1:8086"] }
+  { listen=":6086", location = ["http://10.20.20.20:6086"] }
 ]
 
 [monit]

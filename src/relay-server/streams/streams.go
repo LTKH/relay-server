@@ -128,7 +128,7 @@ func (m *Read) ServeHTTP(w http.ResponseWriter, r *http.Request) {
       }
 
       answBody, answCode := request(
-        Query{
+        &Query{
           Method: r.Method,
           Url:    locat+r.URL.Path,
           Auth:   r.Header.Get("Authorization") ,
@@ -156,8 +156,8 @@ func (m *Read) ServeHTTP(w http.ResponseWriter, r *http.Request) {
   w.WriteHeader(400)
 }
 
-func request(query Query, tout time.Duration) ([]byte, int) {
-  client := &http.Client{ Timeout: time.Duration(tout * time.Second) }
+func request(query *Query, tout time.Duration) ([]byte, int) {
+  //client := &http.Client{ Timeout: time.Duration(tout * time.Second) }
 
   req, err := http.NewRequest(query.Method, query.Url, strings.NewReader(query.Body))
   if err != nil {
@@ -170,7 +170,7 @@ func request(query Query, tout time.Duration) ([]byte, int) {
     req.Header.Set("Authorization", query.Auth)
   }
 
-  resp, err := client.Do(req)
+  resp, err := http.DefaultClient.Do(req)
   if err != nil {
     log.Printf("[error] %v %d", err, http.StatusServiceUnavailable)
     return []byte(err.Error()), http.StatusServiceUnavailable
@@ -188,7 +188,7 @@ func request(query Query, tout time.Duration) ([]byte, int) {
   return body, resp.StatusCode
 }
 
-func Repeat(query Query, cfg config.Config) {
+func Repeat(query *Query, cfg config.Config) {
 
   Job_chan[query.Locat] <- 1
 
@@ -256,7 +256,7 @@ func Sender(locat string, cfg config.Config) {
 
       for q, r := range batch{
         
-        query := Query{ "POST", locat+"/write", r.Auth, q, strings.Join(r.Body, "\n"), locat }
+        query := &Query{ "POST", locat+"/write", r.Auth, q, strings.Join(r.Body, "\n"), locat }
         go Repeat(query, cfg) 
 
       }
