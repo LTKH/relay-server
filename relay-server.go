@@ -216,7 +216,7 @@ func main() {
           continue
         }
 
-        var query *streams.Query
+        var query streams.Query
         if err := json.Unmarshal(data, &query); err != nil {
           log.Printf("[error] reading cache file: %v", err)
           continue

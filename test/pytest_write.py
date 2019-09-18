@@ -5,7 +5,7 @@ from threading import Thread
 def test_write():
 
     def new_request(result, i):
-        for x in range(100):
+        for x in range(100000):
             v = random.uniform(20, 100)
             h = random.randint(10, 40)
             u = 'http://localhost:6086/write?db=test'
@@ -23,8 +23,8 @@ def test_write():
 
     print("\n")
 
-    threads = [None] * 100
-    results = [None] * 100
+    threads = [None] * 1000
+    results = [None] * 1000
 
     for i in range(len(threads)):
         threads[i] = Thread(target=new_request, args=(results, i))
