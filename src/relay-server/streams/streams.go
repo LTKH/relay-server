@@ -82,27 +82,29 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
     //parsing request body
     for _, line := range strings.Split(string(body), "\n") {
-      for key, limit := range Stt_stat {
-        if !limit.Regexp.MatchString(line){
-          log.Printf("[warning] limit not match (%s): %s", r.RemoteAddr, line)
-          if limit.Drop {
-            w.WriteHeader(400)
-            return
+      if line != "" {
+        for key, limit := range Stt_stat {
+          if !limit.Regexp.MatchString(line){
+            log.Printf("[warning] limit not match (%s): %s", r.RemoteAddr, line)
+            if limit.Drop {
+              w.WriteHeader(400)
+              return
+            }
+            continue
           }
-          continue
-        }
-        tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
+          tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
 
-        v, ok := limit.Stat.Load(tag)
-        if ok {
-          val := v.(int)
-          if limit.Limit > 0 && val > limit.Limit {
-            w.WriteHeader(503)
-            return
+          v, ok := limit.Stat.Load(tag)
+          if ok {
+            val := v.(int)
+            if limit.Limit > 0 && val > limit.Limit {
+              w.WriteHeader(503)
+              return
+            }
+            Stt_stat[key].Stat.Store(tag, val + 1)
+          } else {
+            Stt_stat[key].Stat.Store(tag, 1)
           }
-          Stt_stat[key].Stat.Store(tag, val + 1)
-        } else {
-          Stt_stat[key].Stat.Store(tag, 1)
         }
       }
     }
