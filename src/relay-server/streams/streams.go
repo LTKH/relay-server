@@ -85,8 +85,8 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
       if line != "" {
         for key, limit := range Stt_stat {
           if !limit.Regexp.MatchString(line){
-            log.Printf("[warning] limit not match (%s): %s", r.RemoteAddr, line)
             if limit.Drop {
+              log.Printf("[warning] limit not match (%s): %s", r.RemoteAddr, line)
               w.WriteHeader(400)
               return
             }
