@@ -5,16 +5,28 @@ from threading import Thread
 def test_write():
 
     def new_request(result, i):
-        for x in range(100000):
-            v = random.uniform(20, 100)
-            h = random.randint(10, 40)
+        for n in range(1000):
             u = 'http://localhost:6086/write?db=test'
-            d = 'cpu_load_short,host=server'+str(h)+',region=us-west value='+str(v)
-            r = requests.post(u, data=d)
-            print(u+' '+d+' ('+str(i)+'-'+str(x)+')')
+            d = []
+
+            for x in range(200):
+                v = random.uniform(20, 100)
+                h = random.randint(10, 40)
+                h2 = random.randint(10, 100)
+                r = random.randint(10, 100)
+                d.append('cpu_load_short,host=server'+str(h)+',host2=server'+str(h2)+',host3=server'+str(h2)+',region='+str(r)+' value='+str(v))
+
+            try:
+                r = requests.post(u, data="\n".join(d))
+            except:
+                result[i] = False
+                return False
+            
             if r.status_code != 204:
                 result[i] = False
                 return False
+
+            print(u+' - '+str(r.status_code))
 
         result[i] = True
         return True

@@ -1,7 +1,7 @@
 [batch]
 size        = 500
-max_wait    = 5
-buffer_size = 1000000
+max_wait    = 10
+buffer_size = 100000
 
 [cache]
 enabled     = false
@@ -11,16 +11,16 @@ directory   = "/tmp/cache"
 timeout     = 20
 max_threads = 300
 streams     = [
-  { listen=":5087", location = ["http://127.0.0.1:8086"] }
+  { listen=":5086", location = ["http://127.0.0.1:8086"] }
 ]
 
 [write]
 timeout     = 20
-threads     = 400
-repeat      = 5
-delay_time  = 5
+threads     = 1000
+repeat      = 3
+delay_time  = 3
 streams     = [
-  { listen=":6086", location = ["http://10.20.20.20:6086"] }
+  { listen=":6086", location = ["http://127.0.0.1:8086"] }
 ]
 
 [monit]
@@ -33,9 +33,11 @@ listen      = ":5000"
   Regexp    = ".*host=(.*?)[\\s,$].*"
   Replace   = "$1"
   Limit     = 0
+  Drop      = true
 
-  [limits.region]
+  [limits.write]
   Enabled   = false
-  Regexp    = ".*region=(.*?)[\\s,$].*"
-  Replace   = "$1"
+  Regexp    = ".*host=(.*?)[\\s,$].*"
+  Replace   = "all"
   Limit     = 0
+  Drop      = false
