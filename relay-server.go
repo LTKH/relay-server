@@ -9,9 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
-	"relay-server/config"
-	"relay-server/monitor"
-	"relay-server/streams"
+	"github.com/ltkh/relay-server/internal/config"
+	"github.com/ltkh/relay-server/internal/monitor"
+	"github.com/ltkh/relay-server/internal/streams"
 	"runtime"
 	"syscall"
 	"time"
@@ -22,23 +22,6 @@ var (
 )
 
 func openPorts(conf config.Config) error {
-
-	//opening read ports
-	for _, stream := range conf.Read.Streams {
-		server[stream.Listen] = &http.Server{
-			Addr: stream.Listen,
-			Handler: &streams.Read{
-				Location:    stream.Location,
-				Timeout:     conf.Read.Timeout,
-				Max_threads: conf.Read.Max_threads,
-			},
-		}
-		go func(listen string) {
-			if err := server[listen].ListenAndServe(); err != nil {
-				log.Printf("[info] opening read ports: %v", err)
-			}
-		}(stream.Listen)
-	}
 
 	//opening write ports
 	for _, stream := range conf.Write.Streams {
@@ -51,7 +34,7 @@ func openPorts(conf config.Config) error {
 		}
 		go func(listen string) {
 			if err := server[listen].ListenAndServe(); err != nil {
-				log.Printf("[info] opening write ports: %v", err)
+				log.Printf("[error] opening write ports: %v", err)
 			}
 		}(stream.Listen)
 
@@ -66,14 +49,6 @@ func openPorts(conf config.Config) error {
 }
 
 func closePorts(conf config.Config) error {
-
-	//closing read ports
-	for _, stream := range conf.Read.Streams {
-		if err := server[stream.Listen].Close(); err != nil {
-			return err
-		}
-		time.Sleep(1000000)
-	}
 
 	//closing write ports
 	for _, stream := range conf.Write.Streams {
@@ -124,9 +99,9 @@ func main() {
 	//opening monitoring port
 	monitor.Start(conf.Monit.Listen)
 
-	//opening read/write ports
+	//opening write ports
 	if err := openPorts(conf); err != nil {
-		log.Fatalf("[error] opening read/write ports: %v", err)
+		log.Fatalf("[error] opening write ports: %v", err)
 	}
 
 	//compile expressions
@@ -144,39 +119,13 @@ func main() {
 		}
 	}
 
-	/*
-		//reloading configuration file
-		go func(file string) {
-			for {
-				//loading configuration file
-				cfg, err := config.LoadConfigFile(file)
-				if err != nil {
-					log.Printf("[error] loading configuration file: %v", err)
-					continue
-				}
-				if !reflect.DeepEqual(cfg, conf) {
-					log.Printf("[info] loaded configuration file: %v", *cfFile)
-
-					//compile expressions
-					if err := loadLimits(conf); err != nil {
-						log.Printf("[error] compile expressions: %v", err)
-					}
-
-					//saving new config
-					conf = cfg
-				}
-				time.Sleep(10 * time.Second)
-			}
-	  	}(*cfFile)
-	*/
-
 	//program completion signal processing
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
 		//disabled streams
-		//streams.Enabled <- 0
+		closePorts(conf)
 
 		//waiting for processing to complete
 		for i := 0; i < 60; i++ {
@@ -206,13 +155,15 @@ func main() {
 				log.Printf("[error] reading cache directory: %v", err)
 			}
 
-			unix_time := time.Now().Unix()
+			cnt := 0
 
 			for _, file := range files {
 
-				if unix_time-file.ModTime().Unix() < 60 {
-					continue
-				}
+                cnt++
+
+                if cnt > conf.Cache.Batch_size {
+					break
+				} 
 
 				path := conf.Cache.Directory + "/" + file.Name()
 
@@ -242,7 +193,7 @@ func main() {
 			}
 		}
 
-		time.Sleep(60 * time.Second)
+		time.Sleep(conf.Cache.Wait * time.Second)
 	}
 
 }
