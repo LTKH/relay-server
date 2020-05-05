@@ -45,7 +45,7 @@ type Query struct {
 	Locat string
 	Auth  string
 	Query string
-	Body  []byte
+	Body  []string
 }
 
 type Batch struct {
@@ -72,6 +72,7 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if r.URL.Path == "/write" {
+		var lines []string
 
 		//parsing request body
 		for _, line := range strings.Split(string(body), "\n") {
@@ -80,11 +81,14 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					if !limit.Regexp.MatchString(line) {
 						if limit.Drop {
 							log.Printf("[warning] limit not match (%s): %s", r.RemoteAddr, line)
-							w.WriteHeader(400)
-							return
+							//w.WriteHeader(400)
+							//return
+							continue
 						}
-						continue
 					}
+
+					lines = append(lines, line)
+
 					tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
 
 					v, ok := limit.Stat.Load(tag)
@@ -102,13 +106,18 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		if len(lines) == 0 {
+            w.WriteHeader(400)
+			return
+		}
+
 		for _, locat := range m.Location {
 			select {
 			case Req_chan[locat] <- &Query{
 				Locat: locat,
 				Auth:  r.Header.Get("Authorization"),
 				Query: r.URL.Query().Encode(),
-				Body:  body,
+				Body:  lines,
 			}:
 			default:
 				log.Printf("[error] channel is not ready - %s", locat)
@@ -122,11 +131,11 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(400)
 }
 
-func request(method string, url string, query string, rbody []byte, auth string, timeout time.Duration) ([]byte, int) {
+func request(method string, url string, query string, rbody []string, auth string, timeout time.Duration) ([]byte, int) {
 
 	client := &http.Client{Timeout: time.Duration(timeout * time.Second)}
 
-	req, err := http.NewRequest(method, url, strings.NewReader(string(rbody)))
+	req, err := http.NewRequest(method, url, strings.NewReader(strings.Join(rbody, "\n")))
 	if err != nil {
 		log.Printf("[error] %v %d", err, http.StatusServiceUnavailable)
 		return []byte(err.Error()), http.StatusServiceUnavailable
@@ -212,13 +221,13 @@ func Sender(locat string, cfg *config.Config) {
 				if batch[r.Query] == nil {
 					batch[r.Query] = &Batch{Auth: r.Auth, Body: []string{}}
 				}
-				for _, bd := range strings.Split(string(r.Body), "\n") {
+				for _, bd := range r.Body {
 					if bd != "" {
 						batch[r.Query].Body = append(batch[r.Query].Body, bd)
 					}
 					if len(batch[r.Query].Body) >= cfg.Batch.Size {
-						body := strings.Join(batch[r.Query].Body, "\n")
-						go Repeat(&Query{locat, batch[r.Query].Auth, r.Query, []byte(body)}, cfg)
+						//body := strings.Join(batch[r.Query].Body, "\n")
+						go Repeat(&Query{locat, batch[r.Query].Auth, r.Query, batch[r.Query].Body}, cfg)
 						batch[r.Query] = &Batch{Auth: r.Auth, Body: []string{}}
 					}
 				}
@@ -229,8 +238,8 @@ func Sender(locat string, cfg *config.Config) {
 
 		for q, r := range batch {
 			if len(r.Body) > 0 {
-				body := strings.Join(r.Body, "\n")
-				go Repeat(&Query{locat, r.Auth, q, []byte(body)}, cfg)
+				//body := strings.Join(r.Body, "\n")
+				go Repeat(&Query{locat, r.Auth, q, r.Body}, cfg)
 			}
 		}
 
