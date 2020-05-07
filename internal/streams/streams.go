@@ -88,7 +88,11 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		//parsing request body
 		for _, line := range strings.Split(string(body), "\n") {
-			if line != "" && checkMatch(line){
+			if line != "" {
+				if !checkMatch(line){
+					log.Printf("[warning] line not match (%s): %s", r.RemoteAddr, line)
+					continue
+				}
 
 				lines = append(lines, line)
 
