@@ -74,7 +74,6 @@ func loadLimits(conf config.Config) error {
 				Regexp:  res,
 				Replace: limit.Replace,
 				Limit:   limit.Limit,
-				Drop:    limit.Drop,
 			}
 		}
 	}

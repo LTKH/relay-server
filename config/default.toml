@@ -28,11 +28,9 @@ listen      = ":5000"
   Regexp    = ".*host=(.*?)[\\s,$].*"
   Replace   = "$1"
   Limit     = 0
-  Drop      = true
 
   [limits.write]
   Enabled   = false
   Regexp    = ".*host=(.*?)[\\s,$].*"
   Replace   = "all"
   Limit     = 0
-  Drop      = false

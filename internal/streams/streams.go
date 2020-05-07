@@ -21,6 +21,7 @@ var (
 	Job_chan = make(map[string](chan int))
 	Stt_stat = make(map[string](*Limits))
 	Enabled  = make(chan int)
+	rex_infl = regexp.MustCompile(`^[^,\s"]+(?:,[^,\s"]+=(?:"[^"]+"|[^,\s"]+))*\s+(?:,?[^,\s"]+=(?:"[^"]+"|[^,\s"]+))+(\s+[0-9]+)?$`)
 )
 
 type Limits struct {
@@ -53,6 +54,17 @@ type Batch struct {
 	Body []string
 }
 
+func checkMatch(line string) bool {
+	line = strings.ReplaceAll(line, `\ `, `%5C%20`)
+	line = strings.ReplaceAll(line, `\,`, `%5C%2C`)
+	line = strings.ReplaceAll(line, `\"`, `%5C%22`)
+	if !rex_infl.MatchString(line){
+		return false
+	}
+
+	return true
+}
+
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path == "/ping" {
@@ -76,31 +88,26 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		//parsing request body
 		for _, line := range strings.Split(string(body), "\n") {
-			if line != "" {
+			if line != "" && checkMatch(line){
+
+				lines = append(lines, line)
+
 				for key, limit := range Stt_stat {
-					if !limit.Regexp.MatchString(line) {
-						if limit.Drop {
-							log.Printf("[warning] limit not match (%s): %s", r.RemoteAddr, line)
-							//w.WriteHeader(400)
-							//return
-							continue
+					if limit.Regexp.MatchString(line) {
+						tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
+
+						v, ok := limit.Stat.Load(tag)
+						if ok {
+							val := v.(int)
+							if limit.Limit > 0 && val > limit.Limit {
+								w.WriteHeader(503)
+								return
+							}
+							Stt_stat[key].Stat.Store(tag, val+1)
+						} else {
+							Stt_stat[key].Stat.Store(tag, 1)
 						}
-					}
 
-					lines = append(lines, line)
-
-					tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
-
-					v, ok := limit.Stat.Load(tag)
-					if ok {
-						val := v.(int)
-						if limit.Limit > 0 && val > limit.Limit {
-							w.WriteHeader(503)
-							return
-						}
-						Stt_stat[key].Stat.Store(tag, val+1)
-					} else {
-						Stt_stat[key].Stat.Store(tag, 1)
 					}
 				}
 			}
