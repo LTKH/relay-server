@@ -21,7 +21,7 @@ var (
 	Job_chan = make(map[string](chan int))
 	Stt_stat = make(map[string](*Limits))
 	Enabled  = make(chan int)
-	rex_infl = regexp.MustCompile(`^[^,\s"]+(?:,[^,\s"]+=(?:"[^"]+"|[^,\s"]+))*\s+(?:,?[^,\s"]+=(?:"[^"]+"|[^,\s"]+))+(\s+[0-9]+)?$`)
+	rex_infl = regexp.MustCompile(`^[^,\s"]+(?:,[^,\s"]+=(?:"[^"]*"|[^,\s"]+))*\s+(?:,?[^,\s"]+=(?:"[^"]*"|[^,\s"]+))+(\s+[0-9]{19,19})?$`)
 )
 
 type Limits struct {
