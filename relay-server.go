@@ -12,9 +12,9 @@ import (
 	"time"
 	"io/ioutil"
 	"encoding/json"
-	"relay-server/config"
-	"relay-server/monitor"
-	"relay-server/streams"
+	"github.com/ltkh/relay-server/internal/config"
+	"github.com/ltkh/relay-server/internal/monitor"
+	"github.com/ltkh/relay-server/internal/streams"
 )
 
 var (
@@ -23,23 +23,6 @@ var (
 
 func openPorts(conf config.Config) error {
 
-	//opening read ports
-	for _, stream := range conf.Read.Streams {
-		server[stream.Listen] = &http.Server{
-			Addr: stream.Listen,
-			Handler: &streams.Read{
-				Location:    stream.Location,
-				Timeout:     conf.Read.Timeout,
-				Max_threads: conf.Read.Max_threads,
-			},
-		}
-		go func(listen string) { 
-			if err := server[listen].ListenAndServe(); err != nil {
-				log.Printf("[info] opening read ports: %v", err)
-			}
-		}(stream.Listen)
-	}
-  
 	//opening write ports
 	for _, stream := range conf.Write.Streams {
 		server[stream.Listen] = &http.Server{
@@ -66,14 +49,6 @@ func openPorts(conf config.Config) error {
 }
 
 func closePorts(conf config.Config) error {
-
-	//closing read ports
-	for _, stream := range conf.Read.Streams {
-		if err := server[stream.Listen].Close(); err != nil {
-			return err
-    	}	
-    	time.Sleep(1000000)
-	}
 
 	//closing write ports
 	for _, stream := range conf.Write.Streams {
@@ -176,7 +151,7 @@ func main() {
 	go func() {
 		<-c
 		//disabled streams
-		//streams.Enabled <- 0
+		closePorts(conf)
 
 		//waiting for processing to complete
 		for i := 0; i < 60; i++ {
@@ -204,12 +179,14 @@ func main() {
 				log.Printf("[error] reading cache directory: %v", err)
 			}
 
-			unix_time := time.Now().Unix()
+			cnt := 0
 
-			for _, file := range files {
+			for _, file := range files { 
 				
-				if unix_time - file.ModTime().Unix() < 60 {
-				    continue
+				cnt++
+
+				if cnt > conf.Cache.Batch_cnt {
+					break
 				}
 
 				path := conf.Cache.Directory+"/"+file.Name()
@@ -240,7 +217,7 @@ func main() {
 			}
 		}
 
-		time.Sleep(60 * time.Second)
+		time.Sleep(conf.Cache.Wait * time.Second)
 	}
 
 }
