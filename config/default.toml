@@ -23,16 +23,14 @@ listen      = ":5000"
 
 [limits]
 
-  [limits.host]
+  [limits.write]
   Enabled   = true
-  Regexp    = ".*host=(.*?)[\\s,$].*"
-  Replace   = "$1"
-  Limit     = 0
+  Regexp    = "^[^,\\s\"=]+[,\\s].*$"
+  Replace   = "all"
   Drop      = true
 
-  [limits.write]
+  [limits.host]
   Enabled   = false
   Regexp    = ".*host=(.*?)[\\s,$].*"
-  Replace   = "all"
-  Limit     = 0
+  Replace   = "$1"
   Drop      = false

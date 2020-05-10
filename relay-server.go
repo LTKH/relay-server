@@ -34,7 +34,7 @@ func openPorts(conf config.Config) error {
     	}
 		go func(listen string) { 
 			if err := server[listen].ListenAndServe(); err != nil {
-				log.Printf("[info] opening write ports: %v", err)
+				log.Printf("[info] opening write ports: (%s) %v", listen, err)
 			}
 		}(stream.Listen)
 
@@ -73,7 +73,6 @@ func loadLimits(conf config.Config) error {
 			streams.Stt_stat[key] = &streams.Limits{
 				Regexp:  res,
 				Replace: limit.Replace,
-				Limit:   limit.Limit,
 				Drop:    limit.Drop,
 			}
 		}
@@ -172,7 +171,7 @@ func main() {
 	//daemon mode
 	for {
 
-	  	if conf.Cache.Enabled && len(streams.Enabled) == 0 {
+	  	if conf.Cache.Enabled {
 
 			files, err := ioutil.ReadDir(conf.Cache.Directory)
 			if err != nil {
@@ -194,12 +193,18 @@ func main() {
 				data, err := ioutil.ReadFile(path)
 				if err != nil {
 					log.Printf("[error] reading cache file: %s", file.Name())
+					if err := os.Remove(path); err != nil {
+						log.Printf("[error] deleting cache file: %v", err)
+					}
 					continue
 				}
 
 				var query *streams.Query
 				if err := json.Unmarshal(data, &query); err != nil {
 					log.Printf("[error] reading cache file: %v", err)
+					if err := os.Remove(path); err != nil {
+						log.Printf("[error] deleting cache file: %v", err)
+					}
 					continue
 				}
 
