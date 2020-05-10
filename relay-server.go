@@ -1,20 +1,20 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
-	"github.com/ltkh/relay-server/internal/config"
-	"github.com/ltkh/relay-server/internal/monitor"
-	"github.com/ltkh/relay-server/internal/streams"
 	"runtime"
 	"syscall"
 	"time"
+	"io/ioutil"
+	"encoding/json"
+	"github.com/ltkh/relay-server/internal/config"
+	"github.com/ltkh/relay-server/internal/monitor"
+	"github.com/ltkh/relay-server/internal/streams"
 )
 
 var (
@@ -28,13 +28,13 @@ func openPorts(conf config.Config) error {
 		server[stream.Listen] = &http.Server{
 			Addr: stream.Listen,
 			Handler: &streams.Write{
-				Location: stream.Location,
-				Timeout:  conf.Write.Timeout,
+				Location:      stream.Location,
+				Timeout:       conf.Write.Timeout,
 			},
-		}
-		go func(listen string) {
+    	}
+		go func(listen string) { 
 			if err := server[listen].ListenAndServe(); err != nil {
-				log.Printf("[error] opening write ports: %v", err)
+				log.Printf("[info] opening write ports: %v", err)
 			}
 		}(stream.Listen)
 
@@ -54,8 +54,8 @@ func closePorts(conf config.Config) error {
 	for _, stream := range conf.Write.Streams {
 		if err := server[stream.Listen].Close(); err != nil {
 			return err
-		}
-		time.Sleep(1000000)
+    	}
+    	time.Sleep(1000000)
 	}
 
 	return nil
@@ -74,6 +74,7 @@ func loadLimits(conf config.Config) error {
 				Regexp:  res,
 				Replace: limit.Replace,
 				Limit:   limit.Limit,
+				Drop:    limit.Drop,
 			}
 		}
 	}
@@ -93,14 +94,14 @@ func main() {
 	conf, err := config.LoadConfigFile(*cfFile)
 	if err != nil {
 		log.Fatalf("[error] loading configuration file: %v", err)
-	}
+  	}
+  
+    //opening monitoring port
+    monitor.Start(conf.Monit.Listen)
 
-	//opening monitoring port
-	monitor.Start(conf.Monit.Listen)
-
-	//opening write ports
+	//opening read/write ports
 	if err := openPorts(conf); err != nil {
-		log.Fatalf("[error] opening write ports: %v", err)
+		log.Fatalf("[error] opening read/write ports: %v", err)
 	}
 
 	//compile expressions
@@ -109,7 +110,7 @@ func main() {
 	}
 
 	log.Print("[info] relay-server started o_O")
-
+	  
 	//starting sender
 	for _, stream := range conf.Write.Streams {
 		for _, locat := range stream.Location {
@@ -117,6 +118,32 @@ func main() {
 			time.Sleep(1000000)
 		}
 	}
+
+    /*
+	//reloading configuration file
+	go func(file string) {
+		for {
+			//loading configuration file
+			cfg, err := config.LoadConfigFile(file)
+			if err != nil {
+				log.Printf("[error] loading configuration file: %v", err)
+				continue
+			}
+			if !reflect.DeepEqual(cfg, conf) {
+				log.Printf("[info] loaded configuration file: %v", *cfFile)
+
+				//compile expressions
+				if err := loadLimits(conf); err != nil {
+					log.Printf("[error] compile expressions: %v", err)
+				}
+
+				//saving new config
+				conf = cfg
+			}
+			time.Sleep(10 * time.Second)
+		}
+  	}(*cfFile)
+  	*/
 
 	//program completion signal processing
 	c := make(chan os.Signal, 2)
@@ -135,9 +162,7 @@ func main() {
 					count = count + len(streams.Job_chan[locat])
 				}
 			}
-			if count == 0 {
-				break
-			}
+			if count == 0 { break }
 			time.Sleep(1 * time.Second)
 		}
 		log.Print("[info] relay-server stopped")
@@ -147,7 +172,7 @@ func main() {
 	//daemon mode
 	for {
 
-		if conf.Cache.Enabled && len(streams.Enabled) == 0 {
+	  	if conf.Cache.Enabled && len(streams.Enabled) == 0 {
 
 			files, err := ioutil.ReadDir(conf.Cache.Directory)
 			if err != nil {
@@ -156,15 +181,15 @@ func main() {
 
 			cnt := 0
 
-			for _, file := range files {
+			for _, file := range files { 
+				
+				cnt++
 
-                cnt++
-
-                if cnt > conf.Cache.Batch_size {
+				if cnt > conf.Cache.Batch_cnt {
 					break
-				} 
+				}
 
-				path := conf.Cache.Directory + "/" + file.Name()
+				path := conf.Cache.Directory+"/"+file.Name()
 
 				data, err := ioutil.ReadFile(path)
 				if err != nil {
@@ -187,7 +212,7 @@ func main() {
 					if err := os.Remove(path); err != nil {
 						log.Printf("[error] deleting cache file: %v", err)
 					}
-
+				
 				}
 			}
 		}

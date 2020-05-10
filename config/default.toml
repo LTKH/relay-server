@@ -6,8 +6,8 @@ buffer_size = 100000
 [cache]
 enabled     = false
 directory   = "/tmp/cache"
-batch_size  = 500
-wait        = 100
+wait        = 60
+batch_cnt   = 1000
 
 [write]
 timeout     = 20
@@ -28,9 +28,11 @@ listen      = ":5000"
   Regexp    = ".*host=(.*?)[\\s,$].*"
   Replace   = "$1"
   Limit     = 0
+  Drop      = true
 
   [limits.write]
   Enabled   = false
   Regexp    = ".*host=(.*?)[\\s,$].*"
   Replace   = "all"
   Limit     = 0
+  Drop      = false
