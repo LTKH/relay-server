@@ -39,8 +39,8 @@ func openPorts(conf config.Config) error {
 		}(stream.Listen)
 
 		for _, locat := range stream.Location {
-			streams.Req_chan[locat] = make(chan *streams.Query, conf.Batch.Buffer_size)
-			streams.Job_chan[locat] = make(chan int, 1000000)
+			streams.Req_chan[locat.Addr] = make(chan *streams.Query, conf.Batch.Buffer_size)
+			streams.Job_chan[locat.Addr] = make(chan int, 1000000)
 		}
 
 	}
@@ -113,7 +113,7 @@ func main() {
 	//starting sender
 	for _, stream := range conf.Write.Streams {
 		for _, locat := range stream.Location {
-			go streams.Sender(locat, &conf)
+			go streams.Sender(locat.Addr, locat.Cache, &conf)
 			time.Sleep(1000000)
 		}
 	}
@@ -157,8 +157,8 @@ func main() {
 			count := 0
 			for _, stream := range conf.Write.Streams {
 				for _, locat := range stream.Location {
-					count = count + len(streams.Req_chan[locat])
-					count = count + len(streams.Job_chan[locat])
+					count = count + len(streams.Req_chan[locat.Addr])
+					count = count + len(streams.Job_chan[locat.Addr])
 				}
 			}
 			if count == 0 { break }
@@ -208,11 +208,11 @@ func main() {
 					continue
 				}
 
-				if len(streams.Job_chan[query.Locat]) < conf.Write.Threads {
+				if len(streams.Job_chan[query.Addr]) < conf.Write.Threads {
 
-					go streams.Repeat(query, &conf)
+					go streams.Repeat(query, true, &conf)
 
-					log.Printf("[info] readed request from cache - %s", query.Locat+"/write")
+					log.Printf("[info] readed request from cache - %s", query.Addr+"/write")
 
 					if err := os.Remove(path); err != nil {
 						log.Printf("[error] deleting cache file: %v", err)

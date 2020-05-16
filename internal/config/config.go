@@ -25,7 +25,10 @@ type Config struct {
 		Delay_time   time.Duration
 		Streams []struct {
 			Listen       string
-			Location     []string
+			Location  []struct {
+				Addr     string
+				Cache    bool
+			}
 		}
 	}
 	Monit struct {

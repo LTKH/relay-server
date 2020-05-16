@@ -15,7 +15,7 @@ threads     = 1000
 repeat      = 3
 delay_time  = 3
 streams     = [
-  { listen=":6086", location = ["http://127.0.0.1:8086"] }
+  { listen=":6086", location = [{addr="http://127.0.0.1:8086", cache=true}] }
 ]
 
 [monit]

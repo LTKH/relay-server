@@ -30,7 +30,10 @@ type Limits struct {
 }
 
 type Write struct {
-	Location     []string
+	Location  []struct {
+		Addr     string
+		Cache    bool
+	}
 	Timeout      time.Duration
 }
 
@@ -40,7 +43,7 @@ type Request struct {
 }
 
 type Query struct {
-	Locat        string
+	Addr         string
 	Auth         string
 	Query        string
 	Body         []string
@@ -111,14 +114,14 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		for _, locat := range m.Location {
 			select {
-				case Req_chan[locat] <- &Query{
-					Locat:  locat, 
+				case Req_chan[locat.Addr] <- &Query{
+					Addr:   locat.Addr, 
 					Auth:   r.Header.Get("Authorization"),
 					Query:  r.URL.Query().Encode(),
 					Body:   lines,
 				}:
 				default:
-					log.Printf("[error] channel is not ready - %s", locat)
+					log.Printf("[error] channel is not ready - %s", locat.Addr)
 			}
 		}
 
@@ -180,23 +183,23 @@ func cacheWrite(query *Query, dir string) error {
 	return nil
 }
 
-func Repeat(query *Query, cfg *config.Config) {
+func Repeat(query *Query, cache bool, cfg *config.Config) {
 
-	Job_chan[query.Locat] <- 1
+	Job_chan[query.Addr] <- 1
 
 	for i := 1; i <= cfg.Write.Repeat; i++ {
 
-		_, code := request("POST", query.Locat+"/write", query.Query, query.Body, query.Auth, cfg.Write.Timeout)
+		_, code := request("POST", query.Addr+"/write", query.Query, query.Body, query.Auth, cfg.Write.Timeout)
 
 		if code < 500 { 
 			break
 		}
 		
-		if i == cfg.Write.Repeat && cfg.Cache.Enabled {
+		if i == cfg.Write.Repeat && cache {
 			if err := cacheWrite(query, cfg.Cache.Directory); err != nil {
 				log.Printf("[error] creating cache file: %v", err)
 			} else {
-				log.Printf("[info] added request to cache - %s (%d)", query.Locat+"/write", code)
+				log.Printf("[info] added request to cache - %s (%d)", query.Addr+"/write", code)
 			}
 			break
 		}
@@ -204,18 +207,18 @@ func Repeat(query *Query, cfg *config.Config) {
 		time.Sleep(cfg.Write.Delay_time * time.Second)
 	}
 
-	<- Job_chan[query.Locat]
+	<- Job_chan[query.Addr]
 }
 
-func Sender(locat string, cfg *config.Config) {
+func Sender(addr string, cache bool, cfg *config.Config) {
 
 	for {
 
 		batch := map[string]*Batch{}
 
-		for i := 0; i < len(Req_chan[locat]); i++ {
+		for i := 0; i < len(Req_chan[addr]); i++ {
 			select {
-				case r := <- Req_chan[locat]:
+				case r := <- Req_chan[addr]:
 
 					if batch[r.Query] == nil {
 						batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
@@ -225,7 +228,7 @@ func Sender(locat string, cfg *config.Config) {
 							batch[r.Query].Body = append(batch[r.Query].Body, bd)
 						}
 						if len(batch[r.Query].Body) >= cfg.Batch.Size {
-							go Repeat(&Query{ locat, batch[r.Query].Auth, r.Query, batch[r.Query].Body }, cfg)
+							go Repeat(&Query{ addr, batch[r.Query].Auth, r.Query, batch[r.Query].Body }, cache, cfg)
 							batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
 						}
 					}
@@ -236,7 +239,7 @@ func Sender(locat string, cfg *config.Config) {
 		
 		for q, r := range batch{  
 			if len(r.Body) > 0 {
-				go Repeat(&Query{ locat, r.Auth, q, r.Body }, cfg)
+				go Repeat(&Query{ addr, r.Auth, q, r.Body }, cache, cfg)
 			}
 		}
 
