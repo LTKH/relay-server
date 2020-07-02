@@ -61,7 +61,7 @@ func statMatch(line string) error {
 				val := v.(int)
 				stt := val + 1
 				if limit.Drop > 0 && stt >= limit.Drop {
-					return errors.New(fmt.Sprintf("dropped key: %s", key))
+					return errors.New(fmt.Sprintf("dropped: %s - %s", key, tag))
 			    }
 				Stt_stat[key].Stat.Store(tag, stt)
 			} else {
