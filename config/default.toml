@@ -33,8 +33,10 @@ listen          = ":5000"
   Enabled       = true
   Regexp        = "^[^,\\s\"=]+[,\\s].*$"
   Replace       = "all"
+  Drop          = 0
 
   [limits.host]
   Enabled       = true
   Regexp        = ".*host=(.*?)[\\s,$].*"
   Replace       = "$1"
+  Drop          = 10000

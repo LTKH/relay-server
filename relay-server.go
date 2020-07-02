@@ -74,6 +74,7 @@ func loadLimits(conf config.Config) error {
 			streams.Stt_stat[key] = &streams.Limits{
 				Regexp:  res,
 				Replace: limit.Replace,
+				Drop:    limit.Drop,
 			}
 		}
 	}

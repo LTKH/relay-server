@@ -27,6 +27,7 @@ type Limits struct {
 	Stat         sync.Map
 	Regexp       *regexp.Regexp
 	Replace      string
+	Drop         int
 }
 
 type Write struct {
@@ -51,16 +52,16 @@ type Query struct {
 
 func statMatch(line string) bool {
     for key, limit := range Stt_stat {
-		
-		if !limit.Regexp.MatchString(line){
-			log.Printf("[warning] limit not matched: %s", line)
-			return false
-		} else {
+		if limit.Regexp.MatchString(line){
             tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
 			v, ok := limit.Stat.Load(tag)
 			if ok {
 				val := v.(int)
-				Stt_stat[key].Stat.Store(tag, val + 1)
+				stt := val + 1
+				if limit.Drop > 0 && stt >= limit.Drop {
+					return false
+			    }
+				Stt_stat[key].Stat.Store(tag, stt)
 			} else {
 				Stt_stat[key].Stat.Store(tag, 1)
 			}
@@ -104,7 +105,10 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 			
-				statMatch(line)
+				if !statMatch(line){
+					log.Printf("[error] dropped: %s", line)
+                    continue
+				}
 				lines = append(lines, line)
 			}
 		}
