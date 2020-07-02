@@ -192,42 +192,58 @@ func cacheWrite(query *Query, dir string) error {
 	return nil
 }
 
+func Repeat(query *Query, cache bool, cfg *config.Config) {
+
+	Job_chan[query.Addr] <- 1
+
+	for i := 1; i <= cfg.Write.Repeat; i++ {
+
+		_, code := request("POST", query.Addr, query.Query, query.Body, query.Auth, cfg.Write.Timeout)
+
+		if code < 500 { 
+			break
+		}
+		
+		if i == cfg.Write.Repeat && cache {
+			if err := cacheWrite(query, cfg.Cache.Directory); err != nil {
+				log.Printf("[error] creating cache file: %v", err)
+			} else {
+				log.Printf("[info] added request to cache - %s (%d)", query.Addr, code)
+			}
+			break
+		}
+
+		time.Sleep(cfg.Write.Delay_time * time.Second)
+	}
+
+	<- Job_chan[query.Addr]
+}
+
 func Sender(addr string, cache bool, cfg *config.Config) {
 
 	for {
 
-		for i := 0; i < len(Req_chan[addr]); i++ {
+		queryes := map[string]*Query{}
+
+		for i := len(Req_chan[addr]); i > 0; i-- {
 			select {
 				case query := <- Req_chan[addr]:
-
-					go func(query *Query, cfg *config.Config) {
-						Job_chan[query.Addr] <- 1
-
-						for i := 1; i <= cfg.Write.Repeat; i++ {
-
-							_, code := request("POST", query.Addr, query.Query, query.Body, query.Auth, cfg.Write.Timeout)
-					
-							if code < 500 { 
-								break
-							}
-							
-							if i == cfg.Write.Repeat && cache {
-								if err := cacheWrite(query, cfg.Cache.Directory); err != nil {
-									log.Printf("[error] creating cache file: %v", err)
-								} else {
-									log.Printf("[info] added request to cache - %s (%d)", query.Addr, code)
-								}
-								break
-							}
-					
-							time.Sleep(cfg.Write.Delay_time * time.Second)
+	
+					if queryes[query.Query] == nil {
+						queryes[query.Query] = query
+					} else {
+						for _, bd := range query.Body {
+                            queryes[query.Query].Body = append(queryes[query.Query].Body, bd)
 						}
+					}
+					
+			}
 
-						<- Job_chan[query.Addr]
-					}(query, cfg)
-
-				default:
-					continue
+			for k, query := range queryes{  
+				if i == 0 || len(query.Body) >= cfg.Batch.Size {
+					go Repeat(query, cache, cfg)
+					delete(queryes, k)
+				}
 			}
 		}
 

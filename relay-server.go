@@ -204,11 +204,7 @@ func main() {
 
 				if len(streams.Job_chan[query.Addr]) < cfg.Write.Threads {
 
-					select {
-					    case streams.Req_chan[query.Addr] <- query:
-						default:
-							log.Printf("[error] channel is not ready - %s", query.Addr)
-					}
+					go streams.Repeat(query, true, &cfg)
 
 					log.Printf("[info] readed request from cache - %s", query.Addr)
 
