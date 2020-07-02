@@ -1,1 +1,0 @@
-curl -vv -i -XPOST 'http://localhost:6086/write?db=mydb' --data-binary 'cpu_load_short,host=server01,region=us-west value=2 1434055562000000000'

@@ -240,7 +240,7 @@ func Sender(addr string, cache bool, cfg *config.Config) {
 			}
 
 			for k, query := range queryes{  
-				if i == 0 || len(query.Body) >= cfg.Batch.Size {
+				if i == 1 || len(query.Body) >= cfg.Batch.Size {
 					go Repeat(query, cache, cfg)
 					delete(queryes, k)
 				}
