@@ -12,6 +12,7 @@ import (
 	"time"
 	"io/ioutil"
 	"encoding/json"
+	"gopkg.in/natefinch/lumberjack.v2"
 	"github.com/ltkh/relay-server/internal/config"
 	"github.com/ltkh/relay-server/internal/monitor"
 	"github.com/ltkh/relay-server/internal/streams"
@@ -73,7 +74,6 @@ func loadLimits(conf config.Config) error {
 			streams.Stt_stat[key] = &streams.Limits{
 				Regexp:  res,
 				Replace: limit.Replace,
-				Drop:    limit.Drop,
 			}
 		}
 	}
@@ -87,62 +87,46 @@ func main() {
 
 	//command-line flag parsing
 	cfFile := flag.String("config", "", "config file")
+	lgFile := flag.String("logfile", "", "log file")
 	flag.Parse()
 
 	//loading configuration file
-	conf, err := config.LoadConfigFile(*cfFile)
+	cfg, err := config.LoadConfigFile(*cfFile)
 	if err != nil {
 		log.Fatalf("[error] loading configuration file: %v", err)
   	}
   
     //opening monitoring port
-    monitor.Start(conf.Monit.Listen)
+    monitor.Start(cfg.Monit.Listen)
 
 	//opening read/write ports
-	if err := openPorts(conf); err != nil {
+	if err := openPorts(cfg); err != nil {
 		log.Fatalf("[error] opening read/write ports: %v", err)
 	}
 
 	//compile expressions
-	if err := loadLimits(conf); err != nil {
+	if err := loadLimits(cfg); err != nil {
 		log.Fatalf("[error] compile expressions: %v", err)
 	}
 
-	log.Print("[info] relay-server started o_O")
-	  
-	//starting sender
-	for _, stream := range conf.Write.Streams {
-		for _, locat := range stream.Location {
-			go streams.Sender(locat.Addr, locat.Cache, &conf)
-			time.Sleep(1000000)
+	if *lgFile != "" {
+		if cfg.Server.Log_max_size == 0 {
+			cfg.Server.Log_max_size = 1
 		}
+		if cfg.Server.Log_max_backups == 0 {
+			cfg.Server.Log_max_backups = 3
+		}
+		if cfg.Server.Log_max_age == 0 {
+			cfg.Server.Log_max_age = 28
+		}
+		log.SetOutput(&lumberjack.Logger{
+			Filename:   *lgFile,
+			MaxSize:    cfg.Server.Log_max_size,    // megabytes after which new file is created
+			MaxBackups: cfg.Server.Log_max_backups, // number of backups
+			MaxAge:     cfg.Server.Log_max_age,     // days
+			Compress:   cfg.Server.Log_compress,    // using gzip
+		})
 	}
-
-    /*
-	//reloading configuration file
-	go func(file string) {
-		for {
-			//loading configuration file
-			cfg, err := config.LoadConfigFile(file)
-			if err != nil {
-				log.Printf("[error] loading configuration file: %v", err)
-				continue
-			}
-			if !reflect.DeepEqual(cfg, conf) {
-				log.Printf("[info] loaded configuration file: %v", *cfFile)
-
-				//compile expressions
-				if err := loadLimits(conf); err != nil {
-					log.Printf("[error] compile expressions: %v", err)
-				}
-
-				//saving new config
-				conf = cfg
-			}
-			time.Sleep(10 * time.Second)
-		}
-  	}(*cfFile)
-  	*/
 
 	//program completion signal processing
 	c := make(chan os.Signal, 2)
@@ -150,12 +134,12 @@ func main() {
 	go func() {
 		<-c
 		//disabled streams
-		closePorts(conf)
+		closePorts(cfg)
 
 		//waiting for processing to complete
 		for i := 0; i < 60; i++ {
 			count := 0
-			for _, stream := range conf.Write.Streams {
+			for _, stream := range cfg.Write.Streams {
 				for _, locat := range stream.Location {
 					count = count + len(streams.Req_chan[locat.Addr])
 					count = count + len(streams.Job_chan[locat.Addr])
@@ -168,12 +152,22 @@ func main() {
 		os.Exit(0)
 	}()
 
+	log.Print("[info] relay-server started o_O")
+	  
+	//starting senders
+	for _, stream := range cfg.Write.Streams {
+		for _, locat := range stream.Location {
+			go streams.Sender(locat.Addr, locat.Cache, &cfg)
+			time.Sleep(1000000)
+		}
+	}
+
 	//daemon mode
 	for {
 
-	  	if conf.Cache.Enabled {
+	  	if cfg.Cache.Enabled {
 
-			files, err := ioutil.ReadDir(conf.Cache.Directory)
+			files, err := ioutil.ReadDir(cfg.Cache.Directory)
 			if err != nil {
 				log.Printf("[error] reading cache directory: %v", err)
 			}
@@ -184,11 +178,11 @@ func main() {
 				
 				cnt++
 
-				if cnt > conf.Cache.Batch_cnt {
+				if cnt > cfg.Cache.Batch_cnt {
 					break
 				}
 
-				path := conf.Cache.Directory+"/"+file.Name()
+				path := cfg.Cache.Directory+"/"+file.Name()
 
 				data, err := ioutil.ReadFile(path)
 				if err != nil {
@@ -208,11 +202,15 @@ func main() {
 					continue
 				}
 
-				if len(streams.Job_chan[query.Addr]) < conf.Write.Threads {
+				if len(streams.Job_chan[query.Addr]) < cfg.Write.Threads {
 
-					go streams.Repeat(query, true, &conf)
+					select {
+					    case streams.Req_chan[query.Addr] <- query:
+						default:
+							log.Printf("[error] channel is not ready - %s", query.Addr)
+					}
 
-					log.Printf("[info] readed request from cache - %s", query.Addr+"/write")
+					log.Printf("[info] readed request from cache - %s", query.Addr)
 
 					if err := os.Remove(path); err != nil {
 						log.Printf("[error] deleting cache file: %v", err)
@@ -222,7 +220,7 @@ func main() {
 			}
 		}
 
-		time.Sleep(conf.Cache.Wait * time.Second)
+		time.Sleep(cfg.Cache.Wait * time.Second)
 	}
 
 }

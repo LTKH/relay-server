@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"crypto/md5"
 	"encoding/hex"
+	"github.com/influxdata/line-protocol"
 	"github.com/ltkh/relay-server/internal/config"
 )
 
@@ -26,7 +27,6 @@ type Limits struct {
 	Stat         sync.Map
 	Regexp       *regexp.Regexp
 	Replace      string
-	Drop         bool
 }
 
 type Write struct {
@@ -49,19 +49,12 @@ type Query struct {
 	Body         []string
 }
 
-type Batch struct {
-	Auth         string
-	Body         []string
-}
-
-func checkMatch(addr string, line string) bool {
+func statMatch(line string) bool {
     for key, limit := range Stt_stat {
 		
 		if !limit.Regexp.MatchString(line){
-			if limit.Drop {
-				log.Printf("[warning] limit not matched (%s): %s", addr, line)
-				return false
-			}
+			log.Printf("[warning] limit not matched: %s", line)
+			return false
 		} else {
             tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
 			v, ok := limit.Stat.Load(tag)
@@ -95,20 +88,30 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/write" {
 
 		var lines []string
+		var errors []string
 
-		//parsing request body
+		handler := protocol.NewMetricHandler()
+		parser := protocol.NewParser(handler)
+
+        //parsing request body
 		for _, line := range strings.Split(string(body), "\n") {
+
 			if line != "" {
-				if !checkMatch(r.RemoteAddr, line) {
+				_, err := parser.Parse([]byte(line))
+				if err != nil {
+					log.Printf("[error] %v", err)
+					errors = append(errors, err.Error())
 					continue
 				}
-
+			
+				statMatch(line)
 				lines = append(lines, line)
 			}
 		}
 
 		if len(lines) == 0 {
 			w.WriteHeader(400)
+			w.Write([]byte(strings.Join(errors, "\n")))
 			return
 		}
 
@@ -123,6 +126,12 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				default:
 					log.Printf("[error] channel is not ready - %s", locat.Addr)
 			}
+		}
+
+		if len(errors) > 0 {
+			w.WriteHeader(400)
+			w.Write([]byte(strings.Join(errors, "\n")))
+			return
 		}
 
 		w.WriteHeader(204)
@@ -183,63 +192,42 @@ func cacheWrite(query *Query, dir string) error {
 	return nil
 }
 
-func Repeat(query *Query, cache bool, cfg *config.Config) {
-
-	Job_chan[query.Addr] <- 1
-
-	for i := 1; i <= cfg.Write.Repeat; i++ {
-
-		_, code := request("POST", query.Addr+"/write", query.Query, query.Body, query.Auth, cfg.Write.Timeout)
-
-		if code < 500 { 
-			break
-		}
-		
-		if i == cfg.Write.Repeat && cache {
-			if err := cacheWrite(query, cfg.Cache.Directory); err != nil {
-				log.Printf("[error] creating cache file: %v", err)
-			} else {
-				log.Printf("[info] added request to cache - %s (%d)", query.Addr+"/write", code)
-			}
-			break
-		}
-
-		time.Sleep(cfg.Write.Delay_time * time.Second)
-	}
-
-	<- Job_chan[query.Addr]
-}
-
 func Sender(addr string, cache bool, cfg *config.Config) {
 
 	for {
 
-		batch := map[string]*Batch{}
-
 		for i := 0; i < len(Req_chan[addr]); i++ {
 			select {
-				case r := <- Req_chan[addr]:
+				case query := <- Req_chan[addr]:
 
-					if batch[r.Query] == nil {
-						batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
-					}
-					for _, bd := range r.Body {
-						if bd != "" {
-							batch[r.Query].Body = append(batch[r.Query].Body, bd)
+					go func(query *Query, cfg *config.Config) {
+						Job_chan[query.Addr] <- 1
+
+						for i := 1; i <= cfg.Write.Repeat; i++ {
+
+							_, code := request("POST", query.Addr, query.Query, query.Body, query.Auth, cfg.Write.Timeout)
+					
+							if code < 500 { 
+								break
+							}
+							
+							if i == cfg.Write.Repeat && cache {
+								if err := cacheWrite(query, cfg.Cache.Directory); err != nil {
+									log.Printf("[error] creating cache file: %v", err)
+								} else {
+									log.Printf("[info] added request to cache - %s (%d)", query.Addr, code)
+								}
+								break
+							}
+					
+							time.Sleep(cfg.Write.Delay_time * time.Second)
 						}
-						if len(batch[r.Query].Body) >= cfg.Batch.Size {
-							go Repeat(&Query{ addr, batch[r.Query].Auth, r.Query, batch[r.Query].Body }, cache, cfg)
-							batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
-						}
-					}
+
+						<- Job_chan[query.Addr]
+					}(query, cfg)
+
 				default:
 					continue
-			}
-		}
-		
-		for q, r := range batch{  
-			if len(r.Body) > 0 {
-				go Repeat(&Query{ addr, r.Auth, q, r.Body }, cache, cfg)
 			}
 		}
 

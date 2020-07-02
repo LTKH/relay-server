@@ -1,36 +1,40 @@
+[server]
+log_max_size    = 1
+log_max_backups = 3
+log_max_age     = 28
+log_compress    = true
+
 [batch]
-size        = 500
-max_wait    = 10
-buffer_size = 100000
+size            = 500
+max_wait        = 10
+buffer_size     = 100000
 
 [cache]
-enabled     = false
-directory   = "/tmp/cache"
-wait        = 60
-batch_cnt   = 1000
+enabled         = false
+directory       = "/tmp/cache"
+wait            = 60
+batch_cnt       = 1000
 
 [write]
-timeout     = 20
-threads     = 1000
-repeat      = 3
-delay_time  = 3
-streams     = [
-  { listen=":6086", location = [{addr="http://127.0.0.1:8086", cache=true}] }
+timeout         = 20
+threads         = 1000
+repeat          = 3
+delay_time      = 3
+streams         = [
+  { listen=":6086", location = [{addr="http://127.0.0.1:8086/write", cache=true}] }
 ]
 
 [monit]
-listen      = ":5000"
+listen          = ":5000"
 
 [limits]
 
   [limits.write]
-  Enabled   = true
-  Regexp    = "^[^,\\s\"=]+[,\\s].*$"
-  Replace   = "all"
-  Drop      = true
+  Enabled       = true
+  Regexp        = "^[^,\\s\"=]+[,\\s].*$"
+  Replace       = "all"
 
   [limits.host]
-  Enabled   = false
-  Regexp    = ".*host=(.*?)[\\s,$].*"
-  Replace   = "$1"
-  Drop      = false
+  Enabled       = true
+  Regexp        = ".*host=(.*?)[\\s,$].*"
+  Replace       = "$1"
