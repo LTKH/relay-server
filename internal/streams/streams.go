@@ -52,6 +52,11 @@ type Query struct {
 	Body         []string
 }
 
+type Batch struct {
+	Auth         string
+	Body         []string
+}
+
 func statMatch(line string) error {
     for key, limit := range Stt_stat {
 		if limit.Regexp.MatchString(line){
@@ -229,27 +234,32 @@ func Sender(addr string, cache bool, cfg *config.Config) {
 
 	for {
 
-		queryes := map[string]*Query{}
+		batch := map[string]*Batch{}
 
-		for i := len(Req_chan[addr]); i > 0; i-- {
+		for i := 0; i < len(Req_chan[addr]); i++ {
 			select {
-				case query := <- Req_chan[addr]:
-	
-					if queryes[query.Query] == nil {
-						queryes[query.Query] = query
-					} else {
-						for _, bd := range query.Body {
-                            queryes[query.Query].Body = append(queryes[query.Query].Body, bd)
+				case r := <- Req_chan[addr]:
+
+					if batch[r.Query] == nil {
+						batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
+					}
+					for _, bd := range r.Body {
+						if bd != "" {
+							batch[r.Query].Body = append(batch[r.Query].Body, bd)
+						}
+						if len(batch[r.Query].Body) >= cfg.Batch.Size {
+							go Repeat(&Query{ addr, batch[r.Query].Auth, r.Query, batch[r.Query].Body }, cache, cfg)
+							batch[r.Query] = &Batch{ Auth: r.Auth, Body: []string{} }
 						}
 					}
-					
+				default:
+					continue
 			}
-
-			for k, query := range queryes{  
-				if i == 1 || len(query.Body) >= cfg.Batch.Size {
-					go Repeat(query, cache, cfg)
-					delete(queryes, k)
-				}
+		}
+		
+		for q, r := range batch{  
+			if len(r.Body) > 0 {
+				go Repeat(&Query{ addr, r.Auth, q, r.Body }, cache, cfg)
 			}
 		}
 
