@@ -4,6 +4,8 @@ import (
 	//"net"
 	"net/http"
 	_ "net/http/pprof"
+	"errors"
+	"fmt"
 	"log"
 	"time"
 	"io/ioutil"
@@ -50,7 +52,7 @@ type Query struct {
 	Body         []string
 }
 
-func statMatch(line string) bool {
+func statMatch(line string) error {
     for key, limit := range Stt_stat {
 		if limit.Regexp.MatchString(line){
             tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
@@ -59,7 +61,7 @@ func statMatch(line string) bool {
 				val := v.(int)
 				stt := val + 1
 				if limit.Drop > 0 && stt >= limit.Drop {
-					return false
+					return errors.New(fmt.Sprintf("dropped key: %s", key))
 			    }
 				Stt_stat[key].Stat.Store(tag, stt)
 			} else {
@@ -68,7 +70,7 @@ func statMatch(line string) bool {
 		}
 	}
 
-	return true
+	return nil
 }
 
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -105,8 +107,8 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 			
-				if !statMatch(line){
-					log.Printf("[error] dropped: %s", line)
+				if err := statMatch(line); err != nil {
+					log.Printf("[error] %v", err)
                     continue
 				}
 				lines = append(lines, line)

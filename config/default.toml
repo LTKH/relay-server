@@ -39,4 +39,4 @@ listen          = ":5000"
   Enabled       = true
   Regexp        = ".*host=(.*?)[\\s,$].*"
   Replace       = "$1"
-  Drop          = 10000
+  Drop          = 1000
