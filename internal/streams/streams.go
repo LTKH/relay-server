@@ -27,7 +27,7 @@ type Limits struct {
 	Stat         sync.Map
 	Regexp       *regexp.Regexp
 	Replace      string
-	Drop         bool
+	Drop         int
 }
 
 type Write struct {
@@ -58,16 +58,18 @@ type Batch struct {
 func checkMatch(addr string, line string) bool {
     for key, limit := range Stt_stat {
 		
-		if !limit.Regexp.MatchString(line){
-			if limit.Drop {
-				log.Printf("[warning] limit not matched (%s): %s", addr, line)
-				return false
-			}
-		} else {
-            tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
+		if limit.Regexp.MatchString(line){
+			tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
+
 			v, ok := limit.Stat.Load(tag)
 			if ok {
 				val := v.(int)
+				stt := val + 1
+
+				if limit.Drop > 0 && stt >= limit.Drop {
+					return false
+				}
+
 				Stt_stat[key].Stat.Store(tag, val + 1)
 			} else {
 				Stt_stat[key].Stat.Store(tag, 1)
