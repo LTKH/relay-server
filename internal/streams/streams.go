@@ -4,8 +4,6 @@ import (
 	//"net"
 	"net/http"
 	_ "net/http/pprof"
-	"errors"
-	"fmt"
 	"log"
 	"time"
 	"io/ioutil"
@@ -29,7 +27,7 @@ type Limits struct {
 	Stat         sync.Map
 	Regexp       *regexp.Regexp
 	Replace      string
-	Drop         int
+	Drop         bool
 }
 
 type Write struct {
@@ -57,25 +55,27 @@ type Batch struct {
 	Body         []string
 }
 
-func statMatch(line string) error {
+func checkMatch(addr string, line string) bool {
     for key, limit := range Stt_stat {
-		if limit.Regexp.MatchString(line){
+		
+		if !limit.Regexp.MatchString(line){
+			if limit.Drop {
+				log.Printf("[warning] limit not matched (%s): %s", addr, line)
+				return false
+			}
+		} else {
             tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
 			v, ok := limit.Stat.Load(tag)
 			if ok {
 				val := v.(int)
-				stt := val + 1
-				if limit.Drop > 0 && stt >= limit.Drop {
-					return errors.New(fmt.Sprintf("dropped: %s - %s", key, tag))
-			    }
-				Stt_stat[key].Stat.Store(tag, stt)
+				Stt_stat[key].Stat.Store(tag, val + 1)
 			} else {
 				Stt_stat[key].Stat.Store(tag, 1)
 			}
 		}
 	}
 
-	return nil
+	return true
 }
 
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -101,28 +101,26 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		handler := protocol.NewMetricHandler()
 		parser := protocol.NewParser(handler)
 
-        //parsing request body
+		//parsing request body
 		for _, line := range strings.Split(string(body), "\n") {
-
 			if line != "" {
-				_, err := parser.Parse([]byte(line))
+                _, err := parser.Parse([]byte(line))
 				if err != nil {
 					log.Printf("[error] %v", err)
 					errors = append(errors, err.Error())
 					continue
 				}
-			
-				if err := statMatch(line); err != nil {
-					log.Printf("[error] %v", err)
-                    continue
+
+				if !checkMatch(r.RemoteAddr, line) {
+					continue
 				}
+
 				lines = append(lines, line)
 			}
 		}
 
 		if len(lines) == 0 {
 			w.WriteHeader(400)
-			w.Write([]byte(strings.Join(errors, "\n")))
 			return
 		}
 

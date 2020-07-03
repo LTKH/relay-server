@@ -47,7 +47,7 @@ type Limitations struct {
 	Enabled              bool
 	Regexp               string
 	Replace              string
-	Drop                 int
+	Drop                 bool
 }
 
 func LoadConfigFile(filename string) (cfg Config, err error) {

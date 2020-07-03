@@ -129,6 +129,16 @@ func main() {
 		})
 	}
 
+	log.Print("[info] relay-server started o_O")
+	  
+	//starting sender
+	for _, stream := range cfg.Write.Streams {
+		for _, locat := range stream.Location {
+			go streams.Sender(locat.Addr, locat.Cache, &cfg)
+			time.Sleep(1000000)
+		}
+	}
+
 	//program completion signal processing
 	c := make(chan os.Signal, 2)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -152,16 +162,6 @@ func main() {
 		log.Print("[info] relay-server stopped")
 		os.Exit(0)
 	}()
-
-	log.Print("[info] relay-server started o_O")
-	  
-	//starting senders
-	for _, stream := range cfg.Write.Streams {
-		for _, locat := range stream.Location {
-			go streams.Sender(locat.Addr, locat.Cache, &cfg)
-			time.Sleep(1000000)
-		}
-	}
 
 	//daemon mode
 	for {
