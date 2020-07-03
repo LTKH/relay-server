@@ -86,64 +86,58 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 		return
 	}
-
-	//reading request body
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		log.Printf("[error] %v - %s", err, r.URL.Path)
-	}
-	defer r.Body.Close()
-
   
 	if r.URL.Path == "/write" {
 
-		var lines []string
-		var errors []string
+		go func(r *http.Request){
 
-		handler := protocol.NewMetricHandler()
-		parser := protocol.NewParser(handler)
-
-		//parsing request body
-		for _, line := range strings.Split(string(body), "\n") {
-			if line != "" {
-                _, err := parser.Parse([]byte(line))
-				if err != nil {
-					log.Printf("[error] %v", err)
-					errors = append(errors, err.Error())
-					continue
-				}
-
-				if !checkMatch(r.RemoteAddr, line) {
-					continue
-				}
-
-				lines = append(lines, line)
+			//reading request body
+			body, err := ioutil.ReadAll(r.Body)
+			if err != nil {
+				log.Printf("[error] %v - %s", err, r.URL.Path)
 			}
-		}
+			defer r.Body.Close()
 
-		if len(lines) == 0 {
-			w.WriteHeader(400)
-			return
-		}
+			var lines []string
 
-		for _, locat := range m.Location {
-			select {
-				case Req_chan[locat.Addr] <- &Query{
-					Addr:   locat.Addr, 
-					Auth:   r.Header.Get("Authorization"),
-					Query:  r.URL.Query().Encode(),
-					Body:   lines,
-				}:
-				default:
-					log.Printf("[error] channel is not ready - %s", locat.Addr)
+			handler := protocol.NewMetricHandler()
+			parser := protocol.NewParser(handler)
+
+			//parsing request body
+			for _, line := range strings.Split(string(body), "\n") {
+				if line != "" {
+					_, err := parser.Parse([]byte(line))
+					if err != nil {
+						log.Printf("[error] %v", err)
+						continue
+					}
+
+					if !checkMatch(r.RemoteAddr, line) {
+						break
+					}
+
+					lines = append(lines, line)
+				}
 			}
-		}
 
-		if len(errors) > 0 {
-			w.WriteHeader(400)
-			w.Write([]byte(strings.Join(errors, "\n")))
-			return
-		}
+			if len(lines) == 0 {
+				return
+			}
+
+			for _, locat := range m.Location {
+				select {
+					case Req_chan[locat.Addr] <- &Query{
+						Addr:   locat.Addr, 
+						Auth:   r.Header.Get("Authorization"),
+						Query:  r.URL.Query().Encode(),
+						Body:   lines,
+					}:
+					default:
+						log.Printf("[error] channel is not ready - %s", locat.Addr)
+				}
+			}
+
+		}(r)
 
 		w.WriteHeader(204)
 		return
