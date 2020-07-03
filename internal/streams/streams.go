@@ -89,14 +89,14 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
   
 	if r.URL.Path == "/write" {
 
-		go func(){
+		//reading request body
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			log.Printf("[error] %v - %s", err, r.URL.Path)
+		}
+		defer r.Body.Close()
 
-			//reading request body
-			body, err := ioutil.ReadAll(r.Body)
-			if err != nil {
-				log.Printf("[error] %v - %s", err, r.URL.Path)
-			}
-			defer r.Body.Close()
+		go func(body []byte, r *http.Request){
 
 			var lines []string
 
@@ -137,7 +137,7 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-		}()
+		}(body, r)
 
 		w.WriteHeader(204)
 		return
