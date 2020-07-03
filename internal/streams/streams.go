@@ -89,7 +89,7 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
   
 	if r.URL.Path == "/write" {
 
-		go func(r *http.Request){
+		go func(){
 
 			//reading request body
 			body, err := ioutil.ReadAll(r.Body)
@@ -137,7 +137,7 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-		}(r)
+		}()
 
 		w.WriteHeader(204)
 		return
