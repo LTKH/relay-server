@@ -1,7 +1,6 @@
 package streams
 
 import (
-	//"net"
 	"net/http"
 	_ "net/http/pprof"
 	"log"
@@ -9,7 +8,6 @@ import (
 	"io/ioutil"
 	"strings"
 	"regexp"
-	"sync"
 	"encoding/json"
 	"crypto/md5"
 	"encoding/hex"
@@ -20,14 +18,18 @@ import (
 var (
 	Req_chan = make(map[string](chan *Query))
 	Job_chan = make(map[string](chan int))
-	Stt_stat = make(map[string](*Limits))
+	Stt_chan = make(map[string](chan *Stats))
+	Stt_regx = make(map[string](*Limits))
 )
 
+type Stats struct {
+    Limit        string
+	Key          string
+}
+
 type Limits struct {
-	Stat         sync.Map
 	Regexp       *regexp.Regexp
 	Replace      string
-	Drop         int
 }
 
 type Write struct {
@@ -53,31 +55,6 @@ type Query struct {
 type Batch struct {
 	Auth         string
 	Body         []string
-}
-
-func checkMatch(addr string, line string) bool {
-    for key, limit := range Stt_stat {
-		
-		if limit.Regexp.MatchString(line){
-			tag := limit.Regexp.ReplaceAllString(line, limit.Replace)
-
-			v, ok := limit.Stat.Load(tag)
-			if ok {
-				val := v.(int)
-				stt := val + 1
-
-				if limit.Drop > 0 && stt >= limit.Drop {
-					return false
-				}
-
-				Stt_stat[key].Stat.Store(tag, val + 1)
-			} else {
-				Stt_stat[key].Stat.Store(tag, 1)
-			}
-		}
-	}
-
-	return true
 }
 
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -108,12 +85,23 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if line != "" {
 					_, err := parser.Parse([]byte(line))
 					if err != nil {
-						log.Printf("[error] %v", err)
+						log.Printf("[error] %v (%s)", err, r.RemoteAddr)
 						continue
 					}
 
-					if !checkMatch(r.RemoteAddr, line) {
-						break
+					for key, _ := range Stt_chan {
+						if Stt_regx[key].Regexp.MatchString(line){
+							tag := Stt_regx[key].Regexp.ReplaceAllString(line, Stt_regx[key].Replace)
+							select {
+								case Stt_chan[key] <- &Stats{
+									Limit:   key, 
+									Key:     tag,
+								}:
+								default:
+									log.Printf("[error] statistics channel is full - %s (%s)", key, r.RemoteAddr)
+									break
+							}
+						}
 					}
 
 					lines = append(lines, line)

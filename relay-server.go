@@ -63,19 +63,30 @@ func closePorts(conf config.Config) error {
 }
 
 func loadLimits(conf config.Config) error {
-	streams.Stt_stat = make(map[string](*streams.Limits))
+	//streams.Stt_stat = make(map[string](*streams.Limits))
 
 	for key, limit := range conf.Limits {
 		if limit.Enabled {
-			res, err := regexp.Compile(limit.Regexp)
+			regx, err := regexp.Compile(limit.Regexp)
 			if err != nil {
 				return err
 			}
-			streams.Stt_stat[key] = &streams.Limits{
-				Regexp:  res,
+			
+			streams.Stt_chan[key] = make(chan *streams.Stats, limit.Drop)
+			streams.Stt_regx[key] = &streams.Limits{
+				Regexp:  regx,
 				Replace: limit.Replace,
-				Drop:    limit.Drop,
 			}
+
+			//res, err := regexp.Compile(limit.Regexp)
+			//if err != nil {
+			//	return err
+			//}
+			//streams.Stt_stat[key] = &streams.Limits{
+			//	Regexp:  res,
+			//	Replace: limit.Replace,
+			//	Drop:    limit.Drop,
+			//}
 		}
 	}
 	return nil

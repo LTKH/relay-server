@@ -54,13 +54,20 @@ func Start(listen string){
 			for key, _ := range streams.Job_chan {
 				jobGauge.With(prometheus.Labels{"location":key}).Set(float64(len(streams.Job_chan[key])))
 			}
-			for key, limit := range streams.Stt_stat {
-				limit.Stat.Range(func(k, v interface{}) bool {
-					sttGauge.With(prometheus.Labels{"limit":key,"key":k.(string)}).Set(float64(v.(int)))
-					streams.Stt_stat[key].Stat.Store(k, 0)
-					return true 
-				})
+			
+			for key, _ := range streams.Stt_chan {
+				stats := make(map[string]int)
+				for i := 0; i < len(streams.Stt_chan[key]); i++ {
+					select {
+						case r := <- streams.Stt_chan[key]:
+							stats[r.Key]++
+					}
+				}
+				for k, v := range stats {
+					sttGauge.With(prometheus.Labels{"limit":key,"key":k}).Set(float64(v))
+				}
 			}
+			
 			time.Sleep(10 * time.Second)
 		}
 	}()
