@@ -57,6 +57,17 @@ type Batch struct {
 	Body         []string
 }
 
+func readUserIP(r *http.Request) string {
+    IPAddress := r.Header.Get("X-Real-Ip")
+    if IPAddress == "" {
+        IPAddress = r.Header.Get("X-Forwarded-For")
+    }
+    if IPAddress == "" {
+        IPAddress = r.RemoteAddr
+    }
+    return IPAddress
+}
+
 func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path == "/ping" {
@@ -80,12 +91,14 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			handler := protocol.NewMetricHandler()
 			parser := protocol.NewParser(handler)
 
+			rhost := readUserIP(r)
+
 			//parsing request body
 			for _, line := range strings.Split(string(body), "\n") {
 				if line != "" {
 					_, err := parser.Parse([]byte(line))
 					if err != nil {
-						log.Printf("[error] %v (%s)", err, r.RemoteAddr)
+						log.Printf("[error] %v (%s)", err, rhost)
 						continue
 					}
 
@@ -98,7 +111,7 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 									Key:     tag,
 								}:
 								default:
-									log.Printf("[error] statistics channel is full - %s (%s)", key, r.RemoteAddr)
+									log.Printf("[error] statistics channel is full - %s (%s)", key, rhost)
 									break
 							}
 						}
