@@ -1,14 +1,3 @@
-[server]
-log_max_size    = 1
-log_max_backups = 3
-log_max_age     = 28
-log_compress    = true
-
-[batch]
-size            = 500
-max_wait        = 10
-buffer_size     = 100000
-
 [cache]
 enabled         = false
 directory       = "/tmp/cache"
@@ -17,26 +6,11 @@ batch_cnt       = 1000
 
 [write]
 timeout         = 20
-threads         = 1000
 repeat          = 3
 delay_time      = 3
 streams         = [
-  { listen=":6086", location = [{addr="http://127.0.0.1:8086/write", cache=true}] }
+  { listen=":7086", locations = [{ urls=["http://127.0.0.1:8428/write","http://127.0.0.1:8425/write"], cache=false }] }
 ]
 
 [monit]
 listen          = ":4000"
-
-[limits]
-
-  [limits.write]
-  Enabled       = true
-  Regexp        = "^[^,\\s\"=]+[,\\s].*$"
-  Replace       = "all"
-  Drop          = 5
-
-  [limits.host]
-  Enabled       = true
-  Regexp        = ".*host=(.*?)[\\s,$].*"
-  Replace       = "$1"
-  Drop          = 5

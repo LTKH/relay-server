@@ -1,0 +1,21 @@
+cache:
+  enabled:       true
+  directory:     "/tmp/cache"
+  wait:          60
+  batch_cnt:     1000
+
+write:
+  timeout:       20
+  repeat:        3
+  delay_time:    5
+  streams: 
+    - listen: ':7086'
+      locations: 
+        - urls: ["http://127.0.0.1:8428/write","http://127.0.0.1:8429/write"]
+          cache: true
+          regexp: 
+            - match: 'host=(.*)\.example\.com'
+              replace: 'host=$1'
+
+monit:
+  listen:        ":4000"

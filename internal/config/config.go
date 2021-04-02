@@ -1,61 +1,63 @@
 package config
 
 import (
-	"time"
-	"os"
-	"github.com/naoina/toml"
+    "time"
+    //"log"
+    "io/ioutil"
+    "regexp"
+    "gopkg.in/yaml.v2"
 )
 
 type Config struct {
-	Server struct {
-		Log_max_size     int
-		Log_max_backups  int
-		Log_max_age      int
-		Log_compress     bool
-	}
-	Batch struct {
-		Size             int
-		Max_wait         time.Duration
-		Buffer_size      int
-	}
-	Cache struct {
-		Enabled          bool
-		Directory        string
-		Wait             time.Duration
-		Batch_cnt        int
-	}
-	Write struct {
-		Timeout          time.Duration
-		Threads          int
-		Repeat           int
-		Delay_time       time.Duration
-		Streams []struct {
-			Listen       string
-			Location  []struct {
-				Addr     string
-				Cache    bool
-			}
-		}
-	}
-	Monit struct {
-		Listen           string
-	}
-	Limits map[string]Limitations
+    Cache struct {
+        Enabled          bool
+        Directory        string
+        Wait             time.Duration
+        Batch_cnt        int
+    }
+    Write struct {
+        Timeout          time.Duration
+        Repeat           int
+        Delay_time       time.Duration
+        Streams []struct {
+            Listen       string
+            Locations []struct {
+                Urls     []string
+                Cache    bool
+                Regexp       []struct {
+                    Match        string
+                    Replace      string
+                }
+            }
+        }
+    }
+    Monit struct {
+        Listen           string
+    }
 }
 
-type Limitations struct {
-	Enabled              bool
-	Regexp               string
-	Replace              string
-	Drop                 int
-}
+func LoadConfigFile(filename string) (*Config, error) {
+    cfg := &Config{}
 
-func LoadConfigFile(filename string) (cfg Config, err error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return cfg, err
-	}
-	defer f.Close()
+    content, err := ioutil.ReadFile(filename)
+    if err != nil {
+       return cfg, err
+    }
 
-	return cfg, toml.NewDecoder(f).Decode(&cfg)
+    if err := yaml.UnmarshalStrict(content, cfg); err != nil {
+        return cfg, err
+    }
+
+    for _, stream := range cfg.Write.Streams {
+        for _, locat := range stream.Locations {
+            for _, rexp := range locat.Regexp {
+                _, err = regexp.Compile(rexp.Match)
+                if err != nil {
+                    return cfg, err
+                }
+            }
+        }
+    }
+
+    return cfg, nil
 }
