@@ -143,6 +143,7 @@ func request(method string, url string, query string, rbody []byte, auth string,
     if auth != "" {
         req.Header.Set("Authorization", auth)
     }
+    req.Header.Add("Accept-Encoding", "identity")
 
     resp, err := client.Do(req)
     if err != nil {
