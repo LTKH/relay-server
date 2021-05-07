@@ -87,10 +87,12 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
             for _, locat := range m.Locations {
 
+                nlines := lines
+
                 for _, rexp := range locat.Regexp {
                     re := regexp.MustCompile(rexp.Match)
-                    for k, line := range lines {
-                        lines[k] = re.ReplaceAllString(line, rexp.Replace)
+                    for k, line := range nlines {
+                        nlines[k] = re.ReplaceAllString(line, rexp.Replace)
                     }
                 }
 
@@ -98,7 +100,7 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
                     Urls:   locat.Urls,
                     Auth:   r.Header.Get("Authorization"),
                     Query:  r.URL.Query().Encode(),
-                    Body:   []byte(strings.Join(lines, "\n")),
+                    Body:   []byte(strings.Join(nlines, "\n")),
                 }
 
                 go Sender(query, m.Repeat, m.Timeout, m.DelayTime, locat.Cache, m.CacheDir)
