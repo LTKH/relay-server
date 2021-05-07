@@ -83,25 +83,29 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
         monitor.ReqCounter.With(prometheus.Labels{"listen":m.Listen}).Inc()
 
-        for _, locat := range m.Locations {
+        go func(lines []string){
 
-            for _, rexp := range locat.Regexp {
-                re := regexp.MustCompile(rexp.Match)
-                for _, line := range lines {
-                    line = re.ReplaceAllString(line, rexp.Replace)
+            for _, locat := range m.Locations {
+
+                for _, rexp := range locat.Regexp {
+                    re := regexp.MustCompile(rexp.Match)
+                    for k, line := range lines {
+                        lines[k] = re.ReplaceAllString(line, rexp.Replace)
+                    }
                 }
+
+                query := &Query{
+                    Urls:   locat.Urls,
+                    Auth:   r.Header.Get("Authorization"),
+                    Query:  r.URL.Query().Encode(),
+                    Body:   []byte(strings.Join(lines, "\n")),
+                }
+
+                go Sender(query, m.Repeat, m.Timeout, m.DelayTime, locat.Cache, m.CacheDir)
+
             }
 
-            query := &Query{
-                Urls:   locat.Urls,
-                Auth:   r.Header.Get("Authorization"),
-                Query:  r.URL.Query().Encode(),
-                Body:   []byte(strings.Join(lines, "\n")),
-            }
-
-            go Sender(query, m.Repeat, m.Timeout, m.DelayTime, locat.Cache, m.CacheDir)
-
-        }
+        }(lines)
 
         w.WriteHeader(204)
         return
