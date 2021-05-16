@@ -1,21 +1,27 @@
 cache:
-  enabled:       true
+  enabled:       false
   directory:     "/tmp/cache"
   wait:          60
   batch_cnt:     1000
 
 write:
   timeout:       20
-  repeat:        3
+  repeat:        0
   delay_time:    5
   streams: 
     - listen: ':7086'
       locations: 
-        - urls: ["http://127.0.0.1:8428/write","http://127.0.0.1:8429/write"]
-          cache: true
+        - urls: ["http://127.0.0.1:8428/write"]
+          regexp: 
+            - match: 'host=(.*)\.example\.com'
+              replace: 'host=$1'
+        - urls: ["http://127.0.0.1:8086/write"]
+        - urls: ["http://127.0.0.1:8087/write"]
           regexp: 
             - match: 'host=(.*)\.example\.com'
               replace: 'host=$1'
 
 monit:
   listen:        ":4000"
+
+#curl -i -XPOST 'http://localhost:7086/write?db=mydb' --data-binary 'cpu_load_short,host=server01.example.com,region=us-west value=0.64'

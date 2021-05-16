@@ -21,18 +21,20 @@ type Config struct {
         Delay_time       time.Duration
         Streams []struct {
             Listen       string
-            Locations []struct {
-                Urls     []string
-                Cache    bool
-                Regexp       []struct {
-                    Match        string
-                    Replace      string
-                }
-            }
+            Locations    []Location
         }
     }
     Monit struct {
         Listen           string
+    }
+}
+
+type Location struct {
+    Urls         []string
+    Cache        bool
+    Regexp       []struct {
+        Match        string
+        Replace      string
     }
 }
 

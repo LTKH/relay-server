@@ -12,19 +12,13 @@ import (
     "encoding/hex"
     "github.com/influxdata/line-protocol"
     "github.com/ltkh/relay-server/internal/monitor"
+    "github.com/ltkh/relay-server/internal/config"
     "github.com/prometheus/client_golang/prometheus"
 )
 
 type Write struct {
     Listen       string
-    Locations    []struct {
-        Urls         []string
-        Cache        bool
-        Regexp       []struct {
-            Match        string
-            Replace      string
-        }
-    }
+    Locations    []config.Location
     Timeout      time.Duration
     DelayTime    time.Duration
     Repeat       int
@@ -83,11 +77,12 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
         monitor.ReqCounter.With(prometheus.Labels{"listen":m.Listen}).Inc()
 
-        go func(lines []string){
+        for _, locat := range m.Locations {
 
-            for _, locat := range m.Locations {
+            go func(locat config.Location, lines []string){
 
-                nlines := lines
+                nlines := make([]string, len(lines))
+                copy(nlines, lines)
 
                 for _, rexp := range locat.Regexp {
                     re := regexp.MustCompile(rexp.Match)
@@ -103,11 +98,13 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
                     Body:   []byte(strings.Join(nlines, "\n")),
                 }
 
-                go Sender(query, m.Repeat, m.Timeout, m.DelayTime, locat.Cache, m.CacheDir)
+                //log.Printf("[debug] %v %v %v", locat.Urls, locat.Regexp, strings.Join(nlines, "\n"))
 
-            }
+                Sender(query, m.Repeat, m.Timeout, m.DelayTime, locat.Cache, m.CacheDir)
 
-        }(lines)
+            }(locat, lines)
+
+        }
 
         w.WriteHeader(204)
         return
