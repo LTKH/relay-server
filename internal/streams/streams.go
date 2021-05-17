@@ -100,7 +100,7 @@ func (m *Write) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
                 //log.Printf("[debug] %v %v %v", locat.Urls, locat.Regexp, strings.Join(nlines, "\n"))
 
-                Sender(query, m.Repeat, m.Timeout, m.DelayTime, locat.Cache, m.CacheDir)
+                go Sender(query, m.Repeat, m.Timeout, m.DelayTime, locat.Cache, m.CacheDir)
 
             }(locat, lines)
 
